@@ -104,6 +104,6 @@ If you find this project useful for your research, please use the following BibT
     @inproceedings{zhou2021detecting,
       title={Detecting Twenty-thousand Classes using Image-level Supervision},
       author={Zhou, Xingyi and Girdhar, Rohit and Joulin, Armand and Kr{\"a}henb{\"u}hl, Philipp and Misra, Ishan},
-      booktitle={arXiv preprint arXiv:xxxx.xxxxx},
+      booktitle={arXiv preprint arXiv:2201.02605},
       year={2021}
     }
