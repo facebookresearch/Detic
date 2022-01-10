@@ -20,7 +20,7 @@ cd detectron2
 pip install -e .
 
 cd ..
-git clone git@github.com:facebookresearch/Detic.git --recurse-submodules
+git clone https://github.com/facebookresearch/Detic.git --recurse-submodules
 cd Detic
 pip install -r requirements.txt
 ```

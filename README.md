@@ -4,9 +4,9 @@
 
 <p align="center"> <img src='docs/teaser.jpeg' align="center" height="300px"> </p>
 
-> [**Detecting Twenty-thousand Classes using Image-level Supervision**](http://arxiv.org/abs/xxxx.xxxxx),               
+> [**Detecting Twenty-thousand Classes using Image-level Supervision**](http://arxiv.org/abs/2201.02605),               
 > Xingyi Zhou, Rohit Girdhar, Armand Joulin, Philipp Kr&auml;henb&uuml;hl, Ishan Misra,                 
-> *arXiv technical report ([arXiv xxxx.xxxxx](http://arxiv.org/abs/xxxx.xxxxx))*         
+> *arXiv technical report ([arXiv 2201.02605](http://arxiv.org/abs/2201.02605))*         
 
 
 ## Features
@@ -27,6 +27,8 @@
 See [installation instructions](docs/INSTALL.md).
 
 ## Demo
+
+Run our demo using Colab (no GPU needed): [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1QtTW9-ukX2HKZGvt0QvVGqjuqEykoZKI)
 
 We use the default detectron2 [demo interface](https://github.com/facebookresearch/detectron2/blob/main/GETTING_STARTED.md). 
 For example, to run our [21K model](docs/MODEL_ZOO#cross-dataset-evaluation) on a [messy desk image](https://web.eecs.umich.edu/~fouhey/fun/desk/desk.jpg) (image credit [David Fouhey](https://web.eecs.umich.edu/~fouhey)) with the lvis vocabulary, run
