@@ -27,7 +27,7 @@
 See [installation instructions](docs/INSTALL.md).
 
 ## Demo
-Replicate web demo and docker image: [![Replicate](https://replicate.com/saehoonkim/mindall-e/badge)](https://replicate.com/facebookresearch/detic)
+Replicate web demo and docker image: [![Replicate](https://replicate.com/facebookresearch/detic/badge)](https://replicate.com/facebookresearch/detic)
 
 
 Integrated into [Huggingface Spaces 🤗](https://huggingface.co/spaces) using [Gradio](https://github.com/gradio-app/gradio). Try out the web demo: [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/akhaliq/Detic)
