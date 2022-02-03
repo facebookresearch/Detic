@@ -2,6 +2,7 @@
 import argparse
 import json
 from collections import defaultdict
+from detectron2.data.datasets.lvis_v1_categories import LVIS_CATEGORIES
 
 # This mapping is extracted from the official LVIS mapping:
 # https://github.com/lvis-dataset/lvis-api/blob/master/data/coco_to_synset.json
@@ -125,7 +126,7 @@ if __name__ == '__main__':
             cocoid2synset = {x['coco_cat_id']: x['synset'] \
                 for x in COCO_SYNSET_CATEGORIES}
             synset2synonyms = {x['synset']: x['synonyms'] \
-                for x in cc_data['categories']}
+                for x in LVIS_CATEGORIES}
             for x in cats:
                 synonyms = synset2synonyms[cocoid2synset[x['id']]]
                 x['synonyms'] = synonyms

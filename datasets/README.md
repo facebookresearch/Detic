@@ -168,7 +168,7 @@ python tools/get_coco_zeroshot_oriorder.py --data_path datasets/coco/zero-shot/i
 Next, we preprocess the COCO caption data:
 
 ```
-python tools/get_cc_tags.py --cc_ann datasets/coco/annotations/captions_train2017.json --out_path datasets/coco/captions_train2017_tags_allcaps.json --allcaps --convert_caption
+python tools/get_cc_tags.py --cc_ann datasets/coco/annotations/captions_train2017.json --out_path datasets/coco/captions_train2017_tags_allcaps.json --allcaps --convert_caption --cat_path datasets/coco/annotations/instances_val2017.json
 ```
 This creates `datasets/coco/captions_train2017_tags_allcaps.json`.
 
