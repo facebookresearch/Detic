@@ -4,6 +4,7 @@ import json
 import os
 import cv2
 from nltk.corpus import wordnet
+from detectron2.data.detection_utils import read_image
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -31,7 +32,8 @@ if __name__ == '__main__':
         for file in files:
             count = count + 1
             file_name = '{}/{}'.format(folder, file)
-            img = cv2.imread('{}/{}'.format(args.imagenet_path, file_name))
+            # img = cv2.imread('{}/{}'.format(args.imagenet_path, file_name))
+            img = read_image('{}/{}'.format(args.imagenet_path, file_name))
             h, w = img.shape[:2]
             image = {
                 'id': count,
