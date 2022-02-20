@@ -10,6 +10,7 @@ import warnings
 import cv2
 import tqdm
 import sys
+import mss
 
 from detectron2.config import get_cfg
 from detectron2.data.detection_utils import read_image
@@ -21,12 +22,31 @@ from detic.config import add_detic_config
 
 from detic.predictor import VisualizationDemo
 
+# Fake a video capture object OpenCV style - half width, half height of first screen using MSS
+class ScreenGrab:
+    def __init__(self):
+        self.sct = mss.mss()
+        m0 = self.sct.monitors[0]
+        self.monitor = {'top': 0, 'left': 0, 'width': m0['width'] / 2, 'height': m0['height'] / 2}
+
+    def read(self):
+        img =  np.array(self.sct.grab(self.monitor))
+        nf = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+        return (True, nf)
+
+    def isOpened(self):
+        return True
+    def release(self):
+        return True
+
 
 # constants
 WINDOW_NAME = "Detic"
 
 def setup_cfg(args):
     cfg = get_cfg()
+    if args.cpu:
+        cfg.MODEL.DEVICE="cpu"
     add_centernet_config(cfg)
     add_detic_config(cfg)
     cfg.merge_from_file(args.config_file)
@@ -50,7 +70,8 @@ def get_parser():
         metavar="FILE",
         help="path to config file",
     )
-    parser.add_argument("--webcam", action="store_true", help="Take inputs from webcam.")
+    parser.add_argument("--webcam", help="Take inputs from webcam.")
+    parser.add_argument("--cpu", action='store_true', help="Use CPU only.")
     parser.add_argument("--video-input", help="Path to video file.")
     parser.add_argument(
         "--input",
@@ -152,7 +173,10 @@ if __name__ == "__main__":
     elif args.webcam:
         assert args.input is None, "Cannot have both --input and --webcam!"
         assert args.output is None, "output not yet supported with --webcam!"
-        cam = cv2.VideoCapture(0)
+        if args.webcam == "screen":
+            cam = ScreenGrab()
+        else:
+            cam = cv2.VideoCapture(int(args.webcam))
         for vis in tqdm.tqdm(demo.run_on_video(cam)):
             cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
             cv2.imshow(WINDOW_NAME, vis)
