@@ -22,16 +22,15 @@ from detic.config import add_detic_config
 
 from detic.predictor import VisualizationDemo
 
-# Fake a video capture object
+# Fake a video capture object OpenCV style - half width, half height of first screen using MSS
 class ScreenGrab:
     def __init__(self):
         self.sct = mss.mss()
-        self.monitor = {"top": 40, "left": 0, "width": 800, "height": 640}
-        print(self.sct.monitors)
+        m0 = self.sct.monitors[0]
+        self.monitor = {'top': 0, 'left': 0, 'width': m0['width'] / 2, 'height': m0['height'] / 2}
 
     def read(self):
         img =  np.array(self.sct.grab(self.monitor))
-        img = cv2.resize(img, dsize=(800, 640), interpolation=cv2.INTER_CUBIC)
         nf = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
         return (True, nf)
 
