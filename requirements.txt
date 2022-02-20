@@ -1,4 +1,5 @@
 opencv-python
+mss
 timm
 dataclasses
 ftfy
