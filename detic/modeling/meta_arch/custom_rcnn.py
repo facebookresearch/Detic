@@ -40,6 +40,7 @@ class CustomRCNN(GeneralizedRCNN):
         **kwargs):
         """
         """
+        self.onnx_export = False
         self.with_image_labels = with_image_labels
         self.dataset_loss_weight = dataset_loss_weight
         self.fp16 = fp16
@@ -97,6 +98,8 @@ class CustomRCNN(GeneralizedRCNN):
         features = self.backbone(images.tensor)
         proposals, _ = self.proposal_generator(images, features, None)
         results, _ = self.roi_heads(images, features, proposals)
+        if self.onnx_export:
+            return results
         if do_postprocess:
             assert not torch.jit.is_scripting(), \
                 "Scripting is not supported for postprocess."
@@ -104,6 +107,13 @@ class CustomRCNN(GeneralizedRCNN):
                 results, batched_inputs, images.image_sizes)
         else:
             return results
+
+
+    def export_forward(self, image):
+        inputs = {"image": image[0]}
+        batched_inputs = [inputs]
+        x = self.inference(batched_inputs)
+        return x[0].pred_boxes.tensor, x[0].scores, x[0].pred_classes, x[0].pred_masks
 
 
     def forward(self, batched_inputs: List[Dict[str, torch.Tensor]]):

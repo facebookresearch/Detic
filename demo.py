@@ -102,6 +102,7 @@ def get_parser():
         default=0.5,
         help="Minimum score for instance predictions to be shown",
     )
+    parser.add_argument("--onnx-export", action='store_true')
     parser.add_argument(
         "--opts",
         help="Modify config options using the command-line 'KEY VALUE' pairs",
@@ -137,7 +138,7 @@ if __name__ == "__main__":
 
     cfg = setup_cfg(args)
 
-    demo = VisualizationDemo(cfg, args)
+    demo = VisualizationDemo(cfg, args, onnx_export=args.onnx_export)
 
     if args.input:
         if len(args.input) == 1:

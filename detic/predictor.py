@@ -1,4 +1,5 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
+import sys
 import atexit
 import bisect
 import multiprocessing as mp
@@ -36,9 +37,42 @@ BUILDIN_METADATA_PATH = {
     'coco': 'coco_2017_val',
 }
 
+
+class ONNX_Exporter(DefaultPredictor):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+    
+    def __call__(self, original_image):
+        with torch.no_grad():
+            # Apply pre-processing to image.
+            if self.input_format == "RGB":
+                # whether the model expects BGR inputs or RGB
+                original_image = original_image[:, :, ::-1]
+            height, width = original_image.shape[:2]
+            image = self.aug.get_transform(original_image).apply_image(original_image)
+            image = torch.as_tensor(image.astype("float32").transpose(2, 0, 1))
+
+            print("[img.shape]", image.shape)
+            print("------>")
+            from torch.autograd import Variable
+            self.model.forward = self.model.export_forward
+            self.model.onnx_export = True
+            self.model.roi_heads.onnx_export = True
+            x = Variable(image.unsqueeze(0))
+            torch.onnx.export(
+                self.model, x, 'xxx.onnx',
+                input_names=["img"],
+                output_names=["pred_boxes", "scores", "pred_classes", "pred_masks"],
+                dynamic_axes={'img' : {2 : 'h', 3 : 'w'}},
+                verbose=False, opset_version=11
+            )
+            print("<------")
+
+        sys.exit(0)
+
 class VisualizationDemo(object):
     def __init__(self, cfg, args, 
-        instance_mode=ColorMode.IMAGE, parallel=False):
+        instance_mode=ColorMode.IMAGE, parallel=False, onnx_export=False):
         """
         Args:
             cfg (CfgNode):
@@ -60,7 +94,9 @@ class VisualizationDemo(object):
         self.instance_mode = instance_mode
 
         self.parallel = parallel
-        if parallel:
+        if onnx_export:   
+            self.predictor = ONNX_Exporter(cfg)
+        elif parallel:
             num_gpu = torch.cuda.device_count()
             self.predictor = AsyncPredictor(cfg, num_gpus=num_gpu)
         else:
