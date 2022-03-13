@@ -87,7 +87,7 @@ def get_parser():
     parser.add_argument(
         "--vocabulary",
         default="lvis",
-        choices=['lvis', 'openimages', 'objects365', 'coco', 'custom'],
+        choices=['lvis', 'openimages', 'objects365', 'coco', 'custom', 'imagenet21k'],
         help="",
     )
     parser.add_argument(

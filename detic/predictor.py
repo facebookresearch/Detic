@@ -86,6 +86,45 @@ class VisualizationDemo(object):
             self.metadata = MetadataCatalog.get("__unused")
             self.metadata.thing_classes = args.custom_vocabulary.split(',')
             classifier = get_clip_embeddings(self.metadata.thing_classes)
+        elif args.vocabulary == 'imagenet21k':
+            from detic.modeling.text.text_encoder import build_text_encoder
+            from nltk.corpus import wordnet
+            import nltk
+            nltk.download('omw-1.4')
+            nltk.download('wordnet')
+            
+            wnids = [x.strip() for x in open('imagenet21k_wordnet_ids.txt', 'r')]
+            
+            in21k_class_names = []
+            for wnid in wnids:
+                synset = wordnet.synset_from_pos_and_offset('n', int(wnid[1:]))
+                synonyms = [x.name() for x in synset.lemmas()]
+                in21k_class_names.append(synonyms[0])
+            # print(in21k_class_names)
+            
+            self.metadata = MetadataCatalog.get("in21k")
+            self.metadata.thing_classes = in21k_class_names
+            num_classes = len(self.metadata.thing_classes)
+            prompt='a '
+            self.cpu_device = torch.device("cpu")
+            self.instance_mode = instance_mode
+            
+            text_encoder = build_text_encoder(pretrain=True)
+            text_encoder.eval()
+            text_encoder = text_encoder.cuda()
+            
+            classifier = []
+            batch_size = 1024
+            i = 0
+            while i < num_classes:
+                print(i)
+                batch_names = in21k_class_names[i: min(i + batch_size, num_classes)]
+                texts = [prompt + x for x in batch_names]
+                with torch.no_grad():
+                    emb = text_encoder(texts).detach().permute(1, 0).contiguous().cpu()
+                classifier.append(emb)
+                i += batch_size
+            classifier = torch.cat(classifier, dim=1)
         else:
             self.metadata = MetadataCatalog.get(
                 BUILDIN_METADATA_PATH[args.vocabulary])
