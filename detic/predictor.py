@@ -13,6 +13,7 @@ from detectron2.utils.video_visualizer import VideoVisualizer
 from detectron2.utils.visualizer import ColorMode, Visualizer
 
 from .modeling.utils import reset_cls_test
+from .fix_detectron2 import fix_detectron2
 
 
 def get_clip_embeddings(vocabulary, prompt='a '):
@@ -57,6 +58,7 @@ class ONNX_Exporter(DefaultPredictor):
             from torch.autograd import Variable
             self.model.forward = self.model.export_forward
             self.model.onnx_export = True
+            self.model.proposal_generator.onnx_export = True
             self.model.roi_heads.onnx_export = True
             x = Variable(image.unsqueeze(0))
             torch.onnx.export(
@@ -96,6 +98,7 @@ class VisualizationDemo(object):
         self.parallel = parallel
         if onnx_export:   
             self.predictor = ONNX_Exporter(cfg)
+            fix_detectron2()
         elif parallel:
             num_gpu = torch.cuda.device_count()
             self.predictor = AsyncPredictor(cfg, num_gpus=num_gpu)

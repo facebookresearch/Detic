@@ -55,7 +55,9 @@ def window_partition(x, window_size):
         windows: (num_windows*B, window_size, window_size, C)
     """
     B, H, W, C = x.shape
-    x = x.view(B, H // window_size, window_size, W // window_size, window_size, C)
+    x = x.view(
+        B, torch.div(H, window_size, rounding_mode='floor'), window_size, 
+        torch.div(W, window_size, rounding_mode='floor'), window_size, C)
     windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
     return windows
 
@@ -70,8 +72,8 @@ def window_reverse(windows, window_size, H, W):
     Returns:
         x: (B, H, W, C)
     """
-    B = int(windows.shape[0] / (H * W / window_size / window_size))
-    x = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
+    B = torch.div(windows.shape[0], torch.div(H * W, window_size * window_size), rounding_mode='floor').type(torch.int64)
+    x = windows.view(B, torch.div(H, window_size, rounding_mode='floor'), torch.div(W, window_size, rounding_mode='floor'), window_size, window_size, -1)
     x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
     return x
 
@@ -130,7 +132,7 @@ class WindowAttention(nn.Module):
             mask: (0/-inf) mask with shape of (num_windows, Wh*Ww, Wh*Ww) or None
         """
         B_, N, C = x.shape
-        qkv = self.qkv(x).reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        qkv = self.qkv(x).reshape(B_, N, 3, self.num_heads, torch.div(C, self.num_heads, rounding_mode='floor')).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
 
         q = q * self.scale
@@ -143,7 +145,7 @@ class WindowAttention(nn.Module):
 
         if mask is not None:
             nW = mask.shape[0]
-            attn = attn.view(B_ // nW, nW, self.num_heads, N, N) + mask.unsqueeze(1).unsqueeze(0)
+            attn = attn.view(torch.div(B_, nW, rounding_mode='floor'), nW, self.num_heads, N, N) + mask.unsqueeze(1).unsqueeze(0)
             attn = attn.view(-1, self.num_heads, N, N)
             attn = self.softmax(attn)
         else:
@@ -366,8 +368,8 @@ class BasicLayer(nn.Module):
         """
 
         # calculate attention mask for SW-MSA
-        Hp = int(np.ceil(H / self.window_size)) * self.window_size
-        Wp = int(np.ceil(W / self.window_size)) * self.window_size
+        Hp = torch.div(H + self.window_size - 1, self.window_size, rounding_mode='floor') * self.window_size
+        Wp = torch.div(W + self.window_size - 1, self.window_size, rounding_mode='floor') * self.window_size
         img_mask = torch.zeros((1, Hp, Wp, 1), device=x.device)  # 1 Hp Wp 1
         h_slices = (slice(0, -self.window_size),
                     slice(-self.window_size, -self.shift_size),
