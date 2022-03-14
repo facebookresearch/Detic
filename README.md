@@ -60,6 +60,18 @@ The output should look like:
 
 Note that `headphone`, `paper` and `coffe` (typo intended) are **not** LVIS classes. Despite the misspelled class name, our detector can produce a reasonable detection for `coffe`.
 
+## onnx export
+
+~~~
+python demo.py --config-file configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml --input desk.jpg --output out.jpg --vocabulary lvis --onnx-export --opts MODEL.WEIGHTS models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth
+~~~
+
+## 21k vocabulary
+
+~~~
+python demo.py --config-file configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml --input desk.jpg --output out.jpg --vocabulary imagenet21k --confidence-threshold 0.3 --onnx-export --opts MODEL.WEIGHTS models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth
+~~~
+
 ## Benchmark evaluation and training
 
 Please first [prepare datasets](datasets/README.md), then check our   [MODEL ZOO](docs/MODEL_ZOO.md) to reproduce results in our paper. We highlight key results below:
