@@ -8,4 +8,5 @@ fasttext
 scikit-learn
 lvis
 nltk
+detectron2
 git+https://github.com/openai/CLIP.git

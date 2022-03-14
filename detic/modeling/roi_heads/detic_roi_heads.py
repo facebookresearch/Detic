@@ -42,6 +42,7 @@ class DeticCascadeROIHeads(CascadeROIHeads):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.onnx_export = False
         self.mult_proposal_score = mult_proposal_score
         self.with_image_labels = with_image_labels
         self.add_image_box = add_image_box
@@ -259,7 +260,8 @@ class DeticCascadeROIHeads(CascadeROIHeads):
         """
         pool_boxes = [x.proposal_boxes for x in proposals]
         box_features = self.box_pooler(features, pool_boxes)
-        box_features = _ScaleGradient.apply(box_features, 1.0 / self.num_cascade_stages)
+        if not self.onnx_export:
+            box_features = _ScaleGradient.apply(box_features, 1.0 / self.num_cascade_stages)
         box_features = self.box_head[stage](box_features)
         if self.add_feature_to_prop:
             feats_per_image = box_features.split(

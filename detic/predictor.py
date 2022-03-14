@@ -1,4 +1,5 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
+import sys
 import atexit
 import bisect
 import multiprocessing as mp
@@ -12,6 +13,7 @@ from detectron2.utils.video_visualizer import VideoVisualizer
 from detectron2.utils.visualizer import ColorMode, Visualizer
 
 from .modeling.utils import reset_cls_test
+from .fix_detectron2 import fix_detectron2
 
 
 def get_clip_embeddings(vocabulary, prompt='a '):
@@ -36,9 +38,45 @@ BUILDIN_METADATA_PATH = {
     'coco': 'coco_2017_val',
 }
 
+
+class ONNX_Exporter(DefaultPredictor):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+    
+    def __call__(self, original_image):
+        with torch.no_grad():
+            # Apply pre-processing to image.
+            if self.input_format == "RGB":
+                # whether the model expects BGR inputs or RGB
+                original_image = original_image[:, :, ::-1]
+            height, width = original_image.shape[:2]
+            image = self.aug.get_transform(original_image).apply_image(original_image)
+            image = torch.as_tensor(image.astype("float32").transpose(2, 0, 1))
+
+            print("[img.shape]", image.shape)
+            print("------>")
+            from torch.autograd import Variable
+            self.model.forward = self.model.export_forward
+            self.model.onnx_export = True
+            self.model.proposal_generator.onnx_export = True
+            self.model.roi_heads.onnx_export = True
+            x = Variable(image.unsqueeze(0))
+            torch.onnx.export(
+                self.model, x, 'xxx.onnx',
+                input_names=["img"],
+                output_names=["pred_boxes", "scores", "pred_classes", "pred_masks"],
+                dynamic_axes={'img' : {2 : 'h', 3 : 'w'}},
+                verbose=False, opset_version=11
+            )
+            print("<------")
+
+        print("ONNX export finished.")
+        
+        sys.exit(0)
+
 class VisualizationDemo(object):
     def __init__(self, cfg, args, 
-        instance_mode=ColorMode.IMAGE, parallel=False):
+        instance_mode=ColorMode.IMAGE, parallel=False, onnx_export=False):
         """
         Args:
             cfg (CfgNode):
@@ -50,6 +88,45 @@ class VisualizationDemo(object):
             self.metadata = MetadataCatalog.get("__unused")
             self.metadata.thing_classes = args.custom_vocabulary.split(',')
             classifier = get_clip_embeddings(self.metadata.thing_classes)
+        elif args.vocabulary == 'imagenet21k':
+            from detic.modeling.text.text_encoder import build_text_encoder
+            from nltk.corpus import wordnet
+            import nltk
+            nltk.download('omw-1.4')
+            nltk.download('wordnet')
+            
+            wnids = [x.strip() for x in open('imagenet21k_wordnet_ids.txt', 'r')]
+            
+            in21k_class_names = []
+            for wnid in wnids:
+                synset = wordnet.synset_from_pos_and_offset('n', int(wnid[1:]))
+                synonyms = [x.name() for x in synset.lemmas()]
+                in21k_class_names.append(synonyms[0])
+            # print(in21k_class_names)
+            
+            self.metadata = MetadataCatalog.get("in21k")
+            self.metadata.thing_classes = in21k_class_names
+            num_classes = len(self.metadata.thing_classes)
+            prompt='a '
+            self.cpu_device = torch.device("cpu")
+            self.instance_mode = instance_mode
+            
+            text_encoder = build_text_encoder(pretrain=True)
+            text_encoder.eval()
+            text_encoder = text_encoder.cuda()
+            
+            classifier = []
+            batch_size = 1024
+            i = 0
+            while i < num_classes:
+                print(i)
+                batch_names = in21k_class_names[i: min(i + batch_size, num_classes)]
+                texts = [prompt + x for x in batch_names]
+                with torch.no_grad():
+                    emb = text_encoder(texts).detach().permute(1, 0).contiguous().cpu()
+                classifier.append(emb)
+                i += batch_size
+            classifier = torch.cat(classifier, dim=1)
         else:
             self.metadata = MetadataCatalog.get(
                 BUILDIN_METADATA_PATH[args.vocabulary])
@@ -60,7 +137,10 @@ class VisualizationDemo(object):
         self.instance_mode = instance_mode
 
         self.parallel = parallel
-        if parallel:
+        if onnx_export:   
+            self.predictor = ONNX_Exporter(cfg)
+            fix_detectron2()
+        elif parallel:
             num_gpu = torch.cuda.device_count()
             self.predictor = AsyncPredictor(cfg, num_gpus=num_gpu)
         else:
