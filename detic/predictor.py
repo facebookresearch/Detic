@@ -70,6 +70,8 @@ class ONNX_Exporter(DefaultPredictor):
             )
             print("<------")
 
+        print("ONNX export finished.")
+        
         sys.exit(0)
 
 class VisualizationDemo(object):
