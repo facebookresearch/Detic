@@ -64,6 +64,7 @@ def add_detic_config(cfg):
     _C.MODEL.TIMM.OUT_LEVELS = (3, 4, 5)
     _C.MODEL.TIMM.NORM = 'FrozenBN'
     _C.MODEL.TIMM.FREEZE_AT = 0
+    _C.MODEL.TIMM.PRETRAINED = False
     _C.MODEL.DATASET_LOSS_WEIGHT = []
     
     # Multi-dataset dataloader

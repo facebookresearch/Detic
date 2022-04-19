@@ -27,6 +27,9 @@
 See [installation instructions](docs/INSTALL.md).
 
 ## Demo
+
+**Update April 2022**: we released more real-time models [here](docs/MODEL_ZOO.md#real-time-models).
+
 Replicate web demo and docker image: [![Replicate](https://replicate.com/facebookresearch/detic/badge)](https://replicate.com/facebookresearch/detic)
 
 

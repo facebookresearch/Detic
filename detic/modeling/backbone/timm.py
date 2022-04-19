@@ -1,4 +1,4 @@
-  #!/usr/bin/env python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Copyright (c) Facebook, Inc. and its affiliates.
 import math
@@ -23,7 +23,21 @@ from timm.models.helpers import build_model_with_cfg
 from timm.models.registry import register_model
 from timm.models.resnet import ResNet, Bottleneck
 from timm.models.resnet import default_cfgs as default_cfgs_resnet
+from timm.models.convnext import ConvNeXt, default_cfgs, checkpoint_filter_fn
 
+
+@register_model
+def convnext_tiny_21k(pretrained=False, **kwargs):
+    model_args = dict(depths=(3, 3, 9, 3), dims=(96, 192, 384, 768), **kwargs)
+    cfg = default_cfgs['convnext_tiny']
+    cfg['url'] = 'https://dl.fbaipublicfiles.com/convnext/convnext_tiny_22k_224.pth'
+    model = build_model_with_cfg(
+        ConvNeXt, 'convnext_tiny', pretrained,
+        default_cfg=cfg,
+        pretrained_filter_fn=checkpoint_filter_fn,
+        feature_cfg=dict(out_indices=(0, 1, 2, 3), flatten_sequential=True),
+        **model_args)
+    return model
 
 class CustomResNet(ResNet):
     def __init__(self, **kwargs):
@@ -57,7 +71,6 @@ class CustomResNet(ResNet):
 
 
 model_params = {
-    'resnet50': dict(block=Bottleneck, layers=[3, 4, 6, 3]),
     'resnet50_in21k': dict(block=Bottleneck, layers=[3, 4, 6, 3]),
 }
 
@@ -107,17 +120,24 @@ def freeze_module(x):
 
 
 class TIMM(Backbone):
-    def __init__(self, base_name, out_levels, freeze_at=0, norm='FrozenBN'):
+    def __init__(self, base_name, out_levels, freeze_at=0, norm='FrozenBN', pretrained=False):
         super().__init__()
         out_indices = [x - 1 for x in out_levels]
-        if 'resnet' in base_name:
+        if base_name in model_params:
             self.base = create_timm_resnet(
                 base_name, out_indices=out_indices, 
                 pretrained=False)
-        elif 'eff' in base_name:
+        elif 'eff' in base_name or 'resnet' in base_name or 'regnet' in base_name:
             self.base = create_model(
                 base_name, features_only=True, 
-                out_indices=out_indices, pretrained=True)
+                out_indices=out_indices, pretrained=pretrained)
+        elif 'convnext' in base_name:
+            drop_path_rate = 0.2 \
+                if ('tiny' in base_name or 'small' in base_name) else 0.3
+            self.base = create_model(
+                base_name, features_only=True, 
+                out_indices=out_indices, pretrained=pretrained,
+                drop_path_rate=drop_path_rate)
         else:
             assert 0, base_name
         feature_info = [dict(num_chs=f['num_chs'], reduction=f['reduction']) \
@@ -160,6 +180,7 @@ def build_timm_backbone(cfg, input_shape):
         cfg.MODEL.TIMM.OUT_LEVELS,
         freeze_at=cfg.MODEL.TIMM.FREEZE_AT,
         norm=cfg.MODEL.TIMM.NORM,
+        pretrained=cfg.MODEL.TIMM.PRETRAINED,
     )
     return model
 

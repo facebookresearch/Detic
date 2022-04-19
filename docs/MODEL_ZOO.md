@@ -105,7 +105,8 @@ please download the models and place them under `DETIC_ROOT/models/`, and follow
 |[Detic_C2_SwinB_896_4x](../configs/Detic_LI_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml) | 47h |   21.2  |53.0        | [model](https://dl.fbaipublicfiles.com/detic/Detic_LI_CLIP_SwinB_896b32_4x_ft4x_max-size.pth) |
 |[Detic_C2_SwinB_896_4x_IN-21K](../configs/Detic_LI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml) | 47h | 21.4    |   55.2     | [model](https://dl.fbaipublicfiles.com/detic/Detic_LI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth) |
 |[Box-Supervised_C2_SwinB_896_4x+COCO](../configs/BoxSup-C2_LCOCO_CLIP_SwinB_896b32_4x.yaml)     | 43h |  19.7  |   46.4   | [model](https://dl.fbaipublicfiles.com/detic/BoxSup-C2_LCOCO_CLIP_SwinB_896b32_4x.pth) |
-|[Detic_C2_SwinB_896_4x_IN-21K+COCO](../configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-sizeyaml) | 47h |  21.6   |    54.6    | [model](https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth) |
+|[Detic_C2_SwinB_896_4x_IN-21K+COCO](../configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml) | 47h |  21.6   |    54.6    | [model](https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth) |
+
 
 
 #### Note
@@ -119,3 +120,24 @@ please download the models and place them under `DETIC_ROOT/models/`, and follow
 - `Detic_C2_SwinB_896_4x_IN-21K` trains on the full ImageNet-22K. We additionally use a dynamic class sampling ("Modified Federated Loss" in Section 4.4) and use a larger data sampling ratio of ImageNet images (1:16 instead of 1:4).
 
 - `Detic_C2_SwinB_896_4x_IN-21K-COCO` is a model trained on combined LVIS-COCO and ImageNet-21K for better demo purposes. LVIS models do not detect persons well due to its federated annotation protocol. LVIS+COCO models give better visual results.
+
+
+## Real-time models
+
+|         Name          | Run time (ms) |  LVIS box mAP  | Download |
+|-----------------------|------------------|-----------|-----------------|
+|[Detic_C2_SwinB_896_4x_IN-21K+COCO (800x1333, no threshold)](../configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml) | 115 |  44.4   | [model](https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth) |
+|[Detic_C2_SwinB_896_4x_IN-21K+COCO](../configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml) | 46 |   35.0   | [model](https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth) |
+|[Detic_C2_ConvNeXtT_896_4x_IN-21K+COCO](../configs/Detic_LCOCOI21k_CLIP_CXT21k_640b32_4x_ft4x_max-size.yaml) | 26 |  30.7   | [model](https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_CXT21k_640b32_4x_ft4x_max-size.pth) |
+|[Detic_C2_R5021k_896_4x_IN-21K+COCO](../configs/Detic_LCOCOI21k_CLIP_R5021k_640b32_4x_ft4x_max-size.yaml) | 23 |  29.0  | [model](https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_R5021k_640b32_4x_ft4x_max-size.pth) |
+|[Detic_C2_R18_896_4x_IN-21K+COCO](../configs/Detic_LCOCOI21k_CLIP_R18_640b32_4x_ft4x_max-size.yaml) | 18 |  22.1  | [model](https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_R18_640b32_4x_ft4x_max-size.pth) |
+
+- `Detic_C2_SwinB_896_4x_IN-21K+COCO (800x1333, thresh 0.02)` is the entry on the [Cross-dataset evaluation](#Cross-dataset evaluation) section without the mask head. All other entries use a max-size of 640 and an output score threshold of 0.3 using the following command (e.g., with R50).
+
+  ```
+  python train_net.py --config-file configs/Detic_LCOCOI21k_CLIP_R5021k_640b32_4x_ft4x_max-size.yaml --num-gpus 2 --eval-only DATASETS.TEST "('lvis_v1_val',)" MODEL.RESET_CLS_TESTS True MODEL.TEST_CLASSIFIERS "('datasets/metadata/lvis_v1_clip_a+cname.npy',)" MODEL.TEST_NUM_CLASSES "(1203,)" MODEL.MASK_ON False MODEL.WEIGHTS models/Detic_LCOCOI21k_CLIP_R5021k_640b32_4x_ft4x_max-size.pth INPUT.MIN_SIZE_TEST 640 INPUT.MAX_SIZE_TEST 640 MODEL.ROI_HEADS.SCORE_THRESH_TEST 0.3
+  ```
+
+- All models are trained using the same training recipe except for different backbones.
+- The ConvNeXtT and Res50 models are initialized from their corresponding ImageNet-21K pretrained models. The Res18 model is initialized from its ImageNet-1K pretrained model.
+- The runtimes are measured on a local workstation with a Titan RTX GPU.
