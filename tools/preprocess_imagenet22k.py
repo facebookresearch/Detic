@@ -5,7 +5,7 @@ import os
 import numpy as np
 import sys
 
-sys.path.insert(0, 'third_party/CenterNet2/projects/CenterNet2/')
+sys.path.insert(0, 'third_party/CenterNet2/')
 sys.path.insert(0, 'third_party/Deformable-DETR')
 from detic.data.tar_dataset import _TarDataset, DiskTarDataset
 import pickle
