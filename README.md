@@ -38,7 +38,7 @@ Integrated into [Huggingface Spaces 🤗](https://huggingface.co/spaces) using [
 Run our demo using Colab (no GPU needed): [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1QtTW9-ukX2HKZGvt0QvVGqjuqEykoZKI)
 
 We use the default detectron2 [demo interface](https://github.com/facebookresearch/detectron2/blob/main/GETTING_STARTED.md). 
-For example, to run our [21K model](docs/MODEL_ZOO#cross-dataset-evaluation) on a [messy desk image](https://web.eecs.umich.edu/~fouhey/fun/desk/desk.jpg) (image credit [David Fouhey](https://web.eecs.umich.edu/~fouhey)) with the lvis vocabulary, run
+For example, to run our [21K model](docs/MODEL_ZOO.md#cross-dataset-evaluation) on a [messy desk image](https://web.eecs.umich.edu/~fouhey/fun/desk/desk.jpg) (image credit [David Fouhey](https://web.eecs.umich.edu/~fouhey)) with the lvis vocabulary, run
 
 ~~~
 mkdir models
@@ -98,7 +98,7 @@ Please first [prepare datasets](datasets/README.md), then check our   [MODEL ZOO
 
 ## License
 
-The majority of Detic is licensed under the [Apache 2.0 license](LICENSE), however portions of the project are available under separate license terms: SWIN-Transformer, CLIP, and TensorFlow Object Detection API are licensed under the MIT license; UniDet is licensed under the Apache 2.0 license; and the LVIS API is licensed under a custom license (https://github.com/lvis-dataset/lvis-api/blob/master/LICENSE)” If you later add other third party code, please keep this license info updated, and please let us know if that component is licensed under something other than CC-BY-NC, MIT, or CC0
+The majority of Detic is licensed under the [Apache 2.0 license](LICENSE), however portions of the project are available under separate license terms: SWIN-Transformer, CLIP, and TensorFlow Object Detection API are licensed under the MIT license; UniDet is licensed under the Apache 2.0 license; and the LVIS API is licensed under a [custom license](https://github.com/lvis-dataset/lvis-api/blob/master/LICENSE). If you later add other third party code, please keep this license info updated, and please let us know if that component is licensed under something other than CC-BY-NC, MIT, or CC0
 
 ## Ethical Considerations
 Detic's wide range of detection capabilities may introduce similar challenges to many other visual recognition and open-set recognition methods.
