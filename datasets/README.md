@@ -131,7 +131,7 @@ This creates `datasets/objects365/zhiyuan_objv2_train_fixname_fixmiss.json`.
 
 ### OpenImages
 
-We followed the instructions in [UniDet](https://github.com/xingyizhou/UniDet/blob/master/projects/UniDet/unidet_docs/DATASETS.md#openimages) to convert the metadata for OpenImages.
+We followed the instructions in [UniDet](https://github.com/xingyizhou/UniDet/blob/master/docs/DATASETS.md#openimages) to convert the metadata for OpenImages.
 
 The converted folder should look like
 
