@@ -66,8 +66,8 @@ please download the models and place them under `DETIC_ROOT/models/`, and follow
 
 |         Name          |Training time |  box mAP | box mAP_rare  | Download |
 |-----------------------|------------------|-----------|-----------------|----------|
-|[Box-Supervised_DeformDETR_R50_2x](../configs/BoxSup-DeformDETR_L_R50_4x.yaml)   |  31h | 31.7 |  21.4     |  [model](https://dl.fbaipublicfiles.com/detic/BoxSup-DeformDETR_L_R50_4x.pth) |
-|[Detic_DeformDETR_R50_2x](../configs/Detic_DeformDETR_LI_R50_4x_ft4x.yaml) | 47h | 32.5  | 26.2  | [model](https://dl.fbaipublicfiles.com/detic/Detic_DeformDETR_LI_R50_4x_ft4x.pth) |
+|[Box-Supervised_DeformDETR_R50_4x](../configs/BoxSup-DeformDETR_L_R50_4x.yaml)   |  31h | 31.7 |  21.4     |  [model](https://dl.fbaipublicfiles.com/detic/BoxSup-DeformDETR_L_R50_4x.pth) |
+|[Detic_DeformDETR_R50_4x](../configs/Detic_DeformDETR_LI_R50_4x_ft4x.yaml) | 47h | 32.5  | 26.2  | [model](https://dl.fbaipublicfiles.com/detic/Detic_DeformDETR_LI_R50_4x_ft4x.pth) |
 
 
 #### Note
