@@ -6,7 +6,7 @@
 
 > [**Detecting Twenty-thousand Classes using Image-level Supervision**](http://arxiv.org/abs/2201.02605),               
 > Xingyi Zhou, Rohit Girdhar, Armand Joulin, Philipp Kr&auml;henb&uuml;hl, Ishan Misra,                 
-> *arXiv technical report ([arXiv 2201.02605](http://arxiv.org/abs/2201.02605))*         
+> *ECCV 2022 ([arXiv 2201.02605](http://arxiv.org/abs/2201.02605))*         
 
 
 ## Features
@@ -108,9 +108,9 @@ As the user can define arbitrary detection classes, class design and semantics m
 
 If you find this project useful for your research, please use the following BibTeX entry.
 
-    @inproceedings{zhou2021detecting,
+    @inproceedings{zhou2022detecting,
       title={Detecting Twenty-thousand Classes using Image-level Supervision},
       author={Zhou, Xingyi and Girdhar, Rohit and Joulin, Armand and Kr{\"a}henb{\"u}hl, Philipp and Misra, Ishan},
-      booktitle={arXiv preprint arXiv:2201.02605},
+      booktitle={ECCV},
       year={2021}
     }
