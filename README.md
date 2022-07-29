@@ -112,5 +112,5 @@ If you find this project useful for your research, please use the following BibT
       title={Detecting Twenty-thousand Classes using Image-level Supervision},
       author={Zhou, Xingyi and Girdhar, Rohit and Joulin, Armand and Kr{\"a}henb{\"u}hl, Philipp and Misra, Ishan},
       booktitle={ECCV},
-      year={2021}
+      year={2022}
     }
