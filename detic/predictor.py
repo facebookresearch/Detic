@@ -60,13 +60,15 @@ class ONNX_Exporter(DefaultPredictor):
             self.model.onnx_export = True
             self.model.proposal_generator.onnx_export = True
             self.model.roi_heads.onnx_export = True
-            x = Variable(image.unsqueeze(0))
+            
+            # xx = Variable(image.unsqueeze(0))
+            xx = (Variable(image.unsqueeze(0)), Variable(torch.tensor((height, width), dtype=torch.long)))
             torch.onnx.export(
-                self.model, x, 'xxx.onnx',
-                input_names=["img"],
+                self.model, xx, 'xxx.onnx',
+                input_names=["img", "im_hw"],
                 output_names=["pred_boxes", "scores", "pred_classes", "pred_masks"],
-                dynamic_axes={'img' : {2 : 'h', 3 : 'w'}},
-                verbose=False, opset_version=11
+                dynamic_axes={'img' : {2 : 'h', 3 : 'w'},},
+                verbose=False, opset_version=16
             )
             print("<------")
 
@@ -137,7 +139,7 @@ class VisualizationDemo(object):
         self.instance_mode = instance_mode
 
         self.parallel = parallel
-        if onnx_export:   
+        if onnx_export:
             self.predictor = ONNX_Exporter(cfg)
             fix_detectron2()
         elif parallel:

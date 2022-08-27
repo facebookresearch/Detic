@@ -1,8 +1,10 @@
 from typing import List, Tuple
 
 import torch
+from torch.nn import functional as F
 from torchvision.ops import batched_nms
 
+from detectron2 import layers
 from detectron2.layers import cat, shapes_to_tensor
 from detectron2.structures import Instances, Boxes
 from detectron2.modeling import poolers
@@ -82,8 +84,60 @@ def fast_rcnn_inference_single_image(
     return result, filter_inds[:, 0]
 
 
+def _do_paste_mask(masks, boxes, img_h: int, img_w: int, skip_empty: bool = True):
+    device = masks.device
+
+    x0_int, y0_int = 0, 0
+    x1_int, y1_int = img_w, img_h
+    x0, y0, x1, y1 = torch.split(boxes, 1, dim=1)  # each is Nx1
+
+    N = masks.shape[0]
+
+    img_y = torch.arange(y0_int, y1_int, device=device, dtype=torch.float32) + 0.5
+    img_x = torch.arange(x0_int, x1_int, device=device, dtype=torch.float32) + 0.5
+    img_y = (img_y - y0) / (y1 - y0) * 2 - 1
+    img_x = (img_x - x0) / (x1 - x0) * 2 - 1
+    # img_x, img_y have shapes (N, w), (N, h)
+
+    gx = img_x[:, None, :].expand(N, img_y.size(1), img_x.size(1))
+    gy = img_y[:, :, None].expand(N, img_y.size(1), img_x.size(1))
+    grid = torch.stack([gx, gy], dim=3)
+
+    if not torch.jit.is_scripting():
+        if not masks.dtype.is_floating_point:
+            masks = masks.float()
+    img_masks = F.grid_sample(masks, grid.to(masks.dtype), align_corners=False)
+
+    return img_masks[:, 0]
+
+
+def paste_masks_in_image(
+    masks: torch.Tensor, boxes: Boxes, image_shape: Tuple[int, int], threshold: float = 0.5
+):
+    N = masks.shape[0]
+
+    if not isinstance(boxes, torch.Tensor):
+        boxes = boxes.tensor
+    device = boxes.device
+
+    img_h, img_w = image_shape
+
+    inds = torch.arange(N, device=device)
+    masks_chunk = _do_paste_mask(
+        masks[inds, None, :, :], boxes[inds], img_h, img_w, skip_empty=device.type == "cpu"
+    )
+
+    if threshold >= 0:
+        masks_chunk = (masks_chunk >= threshold).to(dtype=torch.bool)
+    else:
+        # for visualization and debugging
+        masks_chunk = (masks_chunk * 255).to(dtype=torch.uint8)
+    return masks_chunk
+
+
 def fix_detectron2():
     setattr(Instances, "__len__", instance_len)
     poolers.convert_boxes_to_pooler_format = convert_boxes_to_pooler_format
     mask_head.mask_rcnn_inference = mask_rcnn_inference
     fast_rcnn.fast_rcnn_inference_single_image = fast_rcnn_inference_single_image
+    layers.paste_masks_in_image = paste_masks_in_image

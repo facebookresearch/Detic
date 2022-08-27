@@ -89,6 +89,7 @@ class CustomRCNN(GeneralizedRCNN):
         self,
         batched_inputs: Tuple[Dict[str, torch.Tensor]],
         detected_instances: Optional[List[Instances]] = None,
+        image_sizes = None,
         do_postprocess: bool = True,
     ):
         assert not self.training
@@ -98,22 +99,32 @@ class CustomRCNN(GeneralizedRCNN):
         features = self.backbone(images.tensor)
         proposals, _ = self.proposal_generator(images, features, None)
         results, _ = self.roi_heads(images, features, proposals)
-        if self.onnx_export:
+
+        if self.onnx_export and image_sizes is None:
             return results
+
         if do_postprocess:
             assert not torch.jit.is_scripting(), \
                 "Scripting is not supported for postprocess."
+            if image_sizes:
+                images.image_sizes = image_sizes
             return CustomRCNN._postprocess(
                 results, batched_inputs, images.image_sizes)
         else:
             return results
 
 
-    def export_forward(self, image):
+    def export_forward(self, image, image_size=None):
         inputs = {"image": image[0]}
         batched_inputs = [inputs]
-        x = self.inference(batched_inputs)
-        return x[0].pred_boxes.tensor, x[0].scores, x[0].pred_classes, x[0].pred_masks
+        image_sizes = [image_size]
+        x = self.inference(batched_inputs, image_sizes=image_sizes)
+        
+        # x = x[0]
+        # return x.pred_boxes.tensor, x.scores, x.pred_classes
+        
+        x = x[0]["instances"]
+        return x.pred_boxes.tensor, x.scores, x.pred_classes, x.pred_masks
 
 
     def forward(self, batched_inputs: List[Dict[str, torch.Tensor]]):
