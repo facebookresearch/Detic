@@ -60,3 +60,6 @@ _darcs
 /projects/*/datasets
 /models
 /snippet
+
+# poetry files
+poetry.lock

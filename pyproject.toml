@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "detic"
+version = "0.0.1"
+description = "Detecting Twenty-thousand Classes using Image-level Supervision"
+authors = ["Masaya Kataoka <ms.kataoka@gmail.com>"]
+license = "Apache License 2.0"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+opencv-python = "^4.7.0"
+mss = "^9.0.1"
+timm = "^0.9.2"
+dataclasses = "^0.6"
+ftfy = "^6.1.1"
+regex = "^2022.10.31"
+clip = {git = "https://github.com/openai/CLIP.git", rev = "a9b1bf5920416aaeaec965c25dd9e8f98c864f16"} # commit hash for 2023/1/21
+fasttext-wheel = "^0.9.2"
+scikit-learn = "^1.2.2"
+lvis = "^0.5.3"
+nltk = "^3.8.1"
+
+[build-system]
+requires = ["setuptools", "wheel", "numpy", "scipy", "pybind11"]
+build-backend = "setuptools.build_meta"
