@@ -8,15 +8,15 @@ from detectron2.modeling import META_ARCH_REGISTRY, build_backbone
 from detectron2.structures import Boxes, Instances
 from ..utils import load_class_freq, get_fed_loss_inds
 
-from models.backbone import Joiner
-from models.deformable_detr import DeformableDETR, SetCriterion, MLP
-from models.deformable_detr import _get_clones
-from models.matcher import HungarianMatcher
-from models.position_encoding import PositionEmbeddingSine
-from models.deformable_transformer import DeformableTransformer
-from models.segmentation import sigmoid_focal_loss
-from util.box_ops import box_cxcywh_to_xyxy, box_xyxy_to_cxcywh
-from util.misc import NestedTensor, accuracy
+from deformable_detr.models.backbone import Joiner
+from deformable_detr.models.deformable_detr import DeformableDETR, SetCriterion, MLP
+from deformable_detr.models.deformable_detr import _get_clones
+from deformable_detr.models.matcher import HungarianMatcher
+from deformable_detr.models.position_encoding import PositionEmbeddingSine
+from deformable_detr.models.deformable_transformer import DeformableTransformer
+from deformable_detr.models.segmentation import sigmoid_focal_loss
+from deformable_detr.util.box_ops import box_cxcywh_to_xyxy, box_xyxy_to_cxcywh
+from deformable_detr.util.misc import NestedTensor, accuracy
 
 
 __all__ = ["DeformableDetr"]
