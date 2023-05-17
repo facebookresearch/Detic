@@ -12,7 +12,6 @@ from tqdm import tqdm
 import operator
 import torch
 
-sys.path.insert(0, 'third_party/CenterNet2/')
 sys.path.insert(0, 'third_party/Deformable-DETR')
 from detic.data.tar_dataset import DiskTarDataset, _TarDataset
 
