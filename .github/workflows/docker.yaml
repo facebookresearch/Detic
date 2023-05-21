@@ -7,7 +7,7 @@ on:
   pull_request:
   push:
     branches:
-      - master
+      - main
   release:
     types: [published]
 jobs:
@@ -31,6 +31,6 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
-          tags: ghcr.io/${{ github.repository_owner }}/Detic:latest
+          tags: ghcr.io/${{ github.repository_owner }}/detic:latest
           no-cache: true
           push: ${{ github.event_name != 'pull_request' }}

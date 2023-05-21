@@ -10,3 +10,4 @@ COPY . Detic
 WORKDIR Detic
 ADD https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth
 RUN pip3 install -r requirements.txt
+ENTRYPOINT ["python2 app.py"]
