@@ -1,12 +1,20 @@
 import gradio
 import subprocess
+import os
+from enum import Enum
+import urllib.request
 
 
-def greet(name):
-    return "Hello " + name + "!"
+DeticModels = [
+    {
+        "model": "Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max_size",
+        "path": "models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max_size.pth",
+        "url": "https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth",
+    }
+]
 
 
-def inference():
+def inference(image):
     subprocess.run(
         [
             "python",
@@ -26,6 +34,15 @@ def inference():
     )
 
 
-app = gradio.Interface(fn=greet, inputs="text", outputs="text")
+def prepare():
+    for model in DeticModels:
+        if not os.path.exists("models"):
+            os.mkdir("models")
+        if not os.path.exists(model["path"]):
+            urllib.request.urlretrieve(model["url"], model["path"])
 
-app.launch()
+
+if __name__ == "__main__":
+    prepare()
+    # app = gradio.Interface(fn=inference, inputs=["image"], outputs=["image"])
+    # app.launch()
