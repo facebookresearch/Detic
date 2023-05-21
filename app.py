@@ -16,6 +16,7 @@ DeticModels = [
 
 
 def inference(image):
+    Image.fromarray(image.astype("uint8"), "RGB").save("input.jpg")
     subprocess.run(
         [
             "python",
@@ -23,7 +24,7 @@ def inference(image):
             "--config-file",
             "configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml",
             "--input",
-            "desk.jpg",
+            "input.jpg",
             "--output",
             "out.jpg",
             "--vocabulary",
@@ -31,8 +32,11 @@ def inference(image):
             "--opts",
             "MODEL.WEIGHTS",
             "models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth",
+            "MODEL.DEVICE",
+            "cpu"
         ]
     )
+    return Image.open('out.jpg')
 
 
 def prepare():
