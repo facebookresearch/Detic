@@ -4,6 +4,7 @@ import os
 from enum import Enum
 import urllib.request
 from PIL import Image
+import argparse
 
 
 DeticModels = [
@@ -33,10 +34,10 @@ def inference(image):
             "MODEL.WEIGHTS",
             "models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth",
             "MODEL.DEVICE",
-            "cpu"
+            "cpu",
         ]
     )
-    return Image.open('out.jpg')
+    return Image.open("out.jpg")
 
 
 def prepare():
@@ -47,7 +48,23 @@ def prepare():
             urllib.request.urlretrieve(model["url"], model["path"])
 
 
+def prepare_argument():
+    parser = argparse.ArgumentParser(description="Run detic inference")
+    parser.add_argument(
+        "ip", type=str, help="ip address of the gradio app", default="0.0.0.0"
+    )
+    parser.add_argument("port", type=str, help="port of the gradio app", default="8000")
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    args = prepare_argument()
     prepare()
-    app = gradio.Interface(fn=inference, inputs=["image"], outputs=["image"])
+    app = gradio.Interface(
+        fn=inference,
+        inputs=["image"],
+        outputs=["image"],
+        server_name=ip,
+        server_port=args.port,
+    )
     app.launch()
