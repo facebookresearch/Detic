@@ -3,12 +3,13 @@ import subprocess
 import os
 from enum import Enum
 import urllib.request
+from PIL import Image
 
 
 DeticModels = [
     {
         "model": "Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max_size",
-        "path": "models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max_size.pth",
+        "path": "models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth",
         "url": "https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth",
     }
 ]
@@ -44,5 +45,5 @@ def prepare():
 
 if __name__ == "__main__":
     prepare()
-    # app = gradio.Interface(fn=inference, inputs=["image"], outputs=["image"])
-    # app.launch()
+    app = gradio.Interface(fn=inference, inputs=["image"], outputs=["image"])
+    app.launch()
