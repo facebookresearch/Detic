@@ -30,7 +30,7 @@ class CustomRes5ROIHeads(Res5ROIHeads):
     def __init__(self, **kwargs):
         cfg = kwargs.pop("cfg")
         super().__init__(**kwargs)
-        stage_channel_factor = 2**3
+        stage_channel_factor = 2 ** 3
         out_channels = cfg.MODEL.RESNETS.RES2_OUT_CHANNELS * stage_channel_factor
 
         self.with_image_labels = cfg.WITH_IMAGE_LABELS

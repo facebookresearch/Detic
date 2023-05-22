@@ -51,9 +51,11 @@ def prepare():
 def prepare_argument():
     parser = argparse.ArgumentParser(description="Run detic inference")
     parser.add_argument(
-        "ip", type=str, help="ip address of the gradio app", default="0.0.0.0"
+        "--ip", type=str, help="ip address of the gradio app", default="0.0.0.0"
     )
-    parser.add_argument("port", type=str, help="port of the gradio app", default="8000")
+    parser.add_argument(
+        "--port", type=str, help="port of the gradio app", default="8000"
+    )
     return parser.parse_args()
 
 
@@ -64,7 +66,8 @@ if __name__ == "__main__":
         fn=inference,
         inputs=["image"],
         outputs=["image"],
-        server_name=ip,
+    )
+    app.launch(
+        server_name=args.ip,
         server_port=args.port,
     )
-    app.launch()

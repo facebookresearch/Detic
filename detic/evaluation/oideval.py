@@ -569,7 +569,7 @@ class Params:
         self.max_dets = 1000
 
         self.area_rng = [
-            [0**2, 1e5**2],
+            [0 ** 2, 1e5 ** 2],
         ]
         self.area_rng_lbl = ["all"]
         self.use_cats = 1
