@@ -54,7 +54,7 @@ def prepare_argument():
         "--ip", type=str, help="ip address of the gradio app", default="0.0.0.0"
     )
     parser.add_argument(
-        "--port", type=str, help="port of the gradio app", default="8000"
+        "--port", type=int, help="port of the gradio app", default="8000"
     )
     return parser.parse_args()
 
