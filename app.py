@@ -17,6 +17,7 @@ DeticModels = [
 
 
 def inference(image):
+    prepare()
     Image.fromarray(image.astype("uint8"), "RGB").save("input.jpg")
     subprocess.run(
         [
@@ -27,7 +28,7 @@ def inference(image):
             "--input",
             "input.jpg",
             "--output",
-            "out.jpg",
+            "output.jpg",
             "--vocabulary",
             "lvis",
             "--opts",
@@ -37,10 +38,14 @@ def inference(image):
             "cpu",
         ]
     )
-    return Image.open("out.jpg")
+    return Image.open("output.jpg")
 
 
 def prepare():
+    if  os.path.exists("output.jpg"):
+        os.remove("output.jpg")
+    if  os.path.exists("input.jpg"):
+        os.remove("input.jpg")
     for model in DeticModels:
         if not os.path.exists("models"):
             os.mkdir("models")
