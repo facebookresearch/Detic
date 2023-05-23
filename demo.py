@@ -166,6 +166,8 @@ if __name__ == "__main__":
                     time.time() - start_time,
                 )
             )
+            for instance in predictions["instances"]:
+                print(instance)
 
             if args.output:
                 if os.path.isdir(args.output):
