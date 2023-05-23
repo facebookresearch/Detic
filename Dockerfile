@@ -1,9 +1,10 @@
-FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-devel
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
 ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update && apt-get install -y \
     git \
     libgl1-mesa-dev \
     libopencv-dev \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 RUN pip3 install git+https://github.com/facebookresearch/detectron2.git@main
 COPY . Detic
