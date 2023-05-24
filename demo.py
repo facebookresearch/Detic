@@ -11,6 +11,8 @@ import cv2
 import tqdm
 import sys
 import mss
+import json
+
 
 from detectron2.config import get_cfg
 from detectron2.data.detection_utils import read_image
@@ -166,8 +168,22 @@ if __name__ == "__main__":
                     time.time() - start_time,
                 )
             )
-            for instance in predictions["instances"]:
-                print(instance)
+            detections = {"detections": []}
+            for i in range(len(predictions["instances"])):
+                detection = {}
+                # detection["box"]["x1"] = predictions["instances"].pred_boxes[i]
+                detection["box"] = {
+                    "x1": predictions["instances"].pred_boxes[i].tensor[0][0].item(),
+                    "y1": predictions["instances"].pred_boxes[i].tensor[0][1].item(),
+                    "x2": predictions["instances"].pred_boxes[i].tensor[0][2].item(),
+                    "y2": predictions["instances"].pred_boxes[i].tensor[0][3].item(),
+                }
+                detection["score"] = predictions["instances"].scores[i].item()
+                detection["class"] = demo.metadata.thing_classes[
+                    predictions["instances"].pred_classes[i].item()
+                ]
+                detections["detections"].append(detection)
+            print(detections)
 
             if args.output:
                 if os.path.isdir(args.output):
