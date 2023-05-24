@@ -18,6 +18,7 @@ inference_test_output
 *.diff
 *.jpg
 !/projects/DensePose/doc/images/*.jpg
+detection.json
 
 # compilation and distribution
 __pycache__

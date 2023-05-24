@@ -183,7 +183,8 @@ if __name__ == "__main__":
                     predictions["instances"].pred_classes[i].item()
                 ]
                 detections["detections"].append(detection)
-            print(detections)
+            with open("detection.json", encoding="utf-8", mode="w") as f:
+                json.dump(detections, f, ensure_ascii=False, indent=2)
 
             if args.output:
                 if os.path.isdir(args.output):

@@ -38,13 +38,16 @@ def inference(image):
             "cpu",
         ]
     )
-    return Image.open("output.jpg")
+    text = ""
+    with open("detection.json", encoding="UTF-8") as f:
+        text = f.read()
+    return [Image.open("output.jpg"), text]
 
 
 def prepare():
-    if  os.path.exists("output.jpg"):
+    if os.path.exists("output.jpg"):
         os.remove("output.jpg")
-    if  os.path.exists("input.jpg"):
+    if os.path.exists("input.jpg"):
         os.remove("input.jpg")
     for model in DeticModels:
         if not os.path.exists("models"):
@@ -70,7 +73,7 @@ if __name__ == "__main__":
     app = gradio.Interface(
         fn=inference,
         inputs=["image"],
-        outputs=["image"],
+        outputs=["image", "text"],
     )
     app.launch(
         server_name=args.ip,
