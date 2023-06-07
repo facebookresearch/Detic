@@ -12,6 +12,7 @@ from torch import nn
 from detectron2.config import get_cfg
 from detectron2.engine import DefaultPredictor
 from detectron2.utils.visualizer import Visualizer, random_color, ColorMode
+from detectron2.modeling.roi_heads.cascade_rcnn import _ScaleGradient
 from detectron2.data import MetadataCatalog
 from detectron2.utils.file_io import PathManager
 
@@ -43,6 +44,16 @@ BUILDIN_METADATA_PATH = {
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 DEFAULT_PROMPT = 'a {}'
+
+
+def desc(x):
+    if isinstance(x, dict):
+        return {k: desc(v) for k, v in x.items()}
+    if isinstance(x, (dict, list, tuple, set)):
+        return type(x)(desc(xi) for xi in x)
+    if hasattr(x, 'shape'):
+        return f'{type(x).__name__}({x.shape}, {x.dtype})'
+    return x
 
 def path_or_url(url):
     from urllib.parse import urlparse
@@ -159,50 +170,94 @@ from detectron2.modeling.roi_heads.fast_rcnn import fast_rcnn_inference
 
 class DeticCascadeROIHeads2(DeticCascadeROIHeads):
     def _forward_box(self, features, proposals, targets=None, ann_type='box', classifier_info=(None,None,None)):
-        if self.mult_proposal_score:
-            k='scores' if len(proposals) > 0 and proposals[0].has('scores') else 'objectness_logits'
-            proposal_scores = [p.get(k) for p in proposals]
-
-        features = [features[f] for f in self.box_in_features]
-        head_outputs = []  # (predictor, predictions, proposals)
-        prev_pred_boxes = None
+        # get image and object metadata from proposals
+        k = 'scores' if len(proposals) > 0 and proposals[0].has('scores') else 'objectness_logits'
+        proposal_scores = [p.get(k) for p in proposals]
+        objectness_logits = [p.objectness_logits for p in proposals]
         image_sizes = [x.image_size for x in proposals]
 
+        # select certain features e.g. ['p3', 'p4', 'p5']
+        features = [features[f] for f in self.box_in_features]
+
+        # run multi-stage classification
+        predictor = boxes = None
+        scores_per_stage = []
         for k in range(self.num_cascade_stages):
             if k > 0:
-                proposals = self._create_proposals_from_boxes(
-                    prev_pred_boxes, image_sizes,
-                    logits=[p.objectness_logits for p in proposals])
-            predictions = self._run_stage(features, proposals, k, 
-                classifier_info=classifier_info)  # added x_features as i=2
-            prev_pred_boxes = self.box_predictor[k].predict_boxes(
-                (predictions[0], predictions[1]), proposals)
-            head_outputs.append((self.box_predictor[k], predictions, proposals))
-        # Each is a list[Tensor] of length #image. Each tensor is Ri x (K+1)
-        scores_per_stage = [h[0].predict_probs(h[1][:2]+h[1][3:], h[2]) for h in head_outputs] # ++ remove x_features from h
-        scores = [
-            sum(list(scores_per_image)) * (1.0 / self.num_cascade_stages)
-            for scores_per_image in zip(*scores_per_stage)
-        ]
+                proposals = self._create_proposals_from_boxes(boxes, image_sizes, logits=objectness_logits)
+                
+            # Run stage - get features per box
+            pool_boxes = [x.proposal_boxes for x in proposals]
+            # pools features using boxes
+            box_features = self.box_pooler(features, pool_boxes)
+            box_features = _ScaleGradient.apply(box_features, 1.0 / self.num_cascade_stages)
+            # several CNN>norm>relu layers
+            box_features = self.box_head[k](box_features)
+            if self.add_feature_to_prop:
+                n_proposals = [len(p) for p in proposals]
+                feats_per_image = box_features.split(n_proposals, dim=0)
+                for feat, p in zip(feats_per_image, proposals):
+                    p.feat = feat
+
+            # predict classes and regress boxes
+            predictor = self.box_predictor[k]
+            # does zero-shot classification against text features - linear > cosine distance
+            # deltas predicted using linear+relu+linear[4]
+            # cls_feats are the features after the linear layer in the zero-shot classifier
+            # prop_score returned if with_softmax_prop. it's x>linear>relu>linear[n_classes+1]
+            scores, deltas, cls_feats, *prop_score = predictor(
+                box_features, classifier_info=classifier_info)
+            # add deltas to boxes (no prediction)
+            boxes = predictor.predict_boxes((scores, deltas), proposals)
+            # just applies sigmoid or softmax depending on config
+            scores = predictor.predict_probs((scores,), proposals)
+            scores_per_stage.append(scores)
+
+        # aggregate scores
+        scores = [torch.mean(torch.stack(s), dim=0) for s in zip(*scores_per_stage)]
         if self.mult_proposal_score:
             scores = [(s * ps[:, None]) ** 0.5 for s, ps in zip(scores, proposal_scores)]
         if self.one_class_per_proposal:
-           scores = [s * (s == s[:, :-1].max(dim=1)[0][:, None]).float() for s in scores]
-        predictor, predictions, proposals = head_outputs[-1]
-        boxes = predictor.predict_boxes((predictions[0], predictions[1]), proposals)
+            scores = [s * (s == s[:, :-1].max(dim=1)[0][:, None]).float() for s in scores]
+
+        # down-select proposals
+        # clip boxes, filter threshold, nms
         pred_instances, filt_idxs = fast_rcnn_inference(
-            boxes,
-            scores,
-            image_sizes,
+            boxes, scores, image_sizes,
             predictor.test_score_thresh,
             predictor.test_nms_thresh,
             predictor.test_topk_per_image,
         )
         # ++ add clip features and box scores to instances [N boxes x 512]
-        pred_instances[0].clip_features = predictions[2][filt_idxs]
-        pred_instances[0].box_scores = proposal_scores[0][filt_idxs]
+        pred_instances[0].clip_features = cls_feats[filt_idxs]
+        if self.mult_proposal_score:
+            pred_instances[0].box_scores = proposal_scores[0][filt_idxs]
         return pred_instances
-
+        
+    # def _training_loss(self, head_outputs, targets, ann_type, classifier_info):
+    #     losses = {}
+    #     storage = get_event_storage()
+    #     for stage, (predictor, predictions, proposals) in enumerate(head_outputs):
+    #         with storage.name_scope("stage{}".format(stage)):
+    #             if ann_type != 'box': 
+    #                 stage_losses = {}
+    #                 if ann_type in ['image', 'caption', 'captiontag']:
+    #                     weak_losses = predictor.image_label_losses(
+    #                         predictions, proposals, 
+    #                         image_labels=[x._pos_category_ids for x in targets],
+    #                         classifier_info=classifier_info,
+    #                         ann_type=ann_type)
+    #                     stage_losses.update(weak_losses)
+    #             else: # supervised
+    #                 stage_losses = predictor.losses(
+    #                     (predictions[0], predictions[1]), proposals,
+    #                     classifier_info=classifier_info)
+    #                 if self.with_image_labels:
+    #                     stage_losses['image_loss'] = predictions[0].new_zeros([1])[0]
+    #         losses.update({
+    #             k + "_stage{}".format(stage): v
+    #             for k, v in stage_losses.items()})
+    #     return losses
 
 class DeticFastRCNNOutputLayers2(DeticFastRCNNOutputLayers):
     def forward(self, x, classifier_info=(None,None,None)):
@@ -226,8 +281,7 @@ class DeticFastRCNNOutputLayers2(DeticFastRCNNOutputLayers):
         if self.with_softmax_prop:
             prop_score = self.prop_score(x)
             return scores, proposal_deltas, x_features, prop_score
-        else:
-            return scores, proposal_deltas, x_features
+        return scores, proposal_deltas, x_features
         # ++ return x_features
 
 
