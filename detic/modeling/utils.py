@@ -4,6 +4,18 @@ import json
 import numpy as np
 from torch.nn import functional as F
 
+
+def desc(x):
+    if isinstance(x, dict):
+        return {k: desc(v) for k, v in x.items()}
+    if isinstance(x, (dict, list, tuple, set)):
+        return type(x)(desc(xi) for xi in x)
+    if hasattr(x, 'shape'):
+        return f'{type(x)}({x.shape})'
+    return x
+
+
+
 def load_class_freq(
     path='datasets/metadata/lvis_v1_train_cat_info.json', freq_weight=1.0):
     cat_info = json.load(open(path, 'r'))

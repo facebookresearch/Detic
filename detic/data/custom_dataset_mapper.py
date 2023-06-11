@@ -147,19 +147,20 @@ class CustomDatasetMapper(DatasetMapper):
                     anno.pop("keypoints", None)
 
             # USER: Implement additional transformations if you have other types of data
-            all_annos = [
-                (utils.transform_instance_annotations(
+            annos = [
+                utils.transform_instance_annotations(
                     obj, transforms, image_shape, 
                     keypoint_hflip_indices=self.keypoint_hflip_indices,
-                ),  obj.get("iscrowd", 0))
+                )
                 for obj in dataset_dict.pop("annotations")
+                if obj.get("iscrowd", 0)
             ]
-            annos = [ann[0] for ann in all_annos if ann[1] == 0]
             instances = utils.annotations_to_instances(
                 annos, image_shape, mask_format=self.instance_mask_format
             )
+            instances.gt_property_classes = get_class_vector(annos, "property_id")
+            instances.gt_relation_classes = get_class_vector(annos, "relation_id")
             
-            del all_annos
             if self.recompute_boxes:
                 instances.gt_boxes = instances.gt_masks.get_bounding_boxes()
             dataset_dict["instances"] = utils.filter_empty_instances(instances)
@@ -174,6 +175,9 @@ class CustomDatasetMapper(DatasetMapper):
                 dataset_dict['instances'].gt_classes.tolist()
             ))]
         return dataset_dict
+
+def get_class_vector(annos, key):
+    return torch.tensor([int(obj.get(key, -1)) for obj in annos], dtype=torch.int64)
 
 # DETR augmentation
 def build_transform_gen(cfg, is_train):
