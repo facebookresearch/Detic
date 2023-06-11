@@ -15,6 +15,7 @@ from detectron2.utils.visualizer import Visualizer, random_color, ColorMode
 from detectron2.modeling.roi_heads.cascade_rcnn import _ScaleGradient
 from detectron2.data import MetadataCatalog
 from detectron2.utils.file_io import PathManager
+from detectron2.utils.events import get_event_storage
 
 # Detic libraries
 # detic_path = os.getenv('DETIC_PATH') or 'Detic'
@@ -182,10 +183,16 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
         # run multi-stage classification
         predictor = boxes = None
         scores_per_stage = []
+        head_outputs = []
         for k in range(self.num_cascade_stages):
             if k > 0:
+                # use boxes from previous iter as new proposals
                 proposals = self._create_proposals_from_boxes(boxes, image_sizes, logits=objectness_logits)
-                
+                if self.training and ann_type in ['box']:
+                    # match proposals to ground truth
+                    proposals = self._match_and_label_boxes(
+                        proposals, k, targets)
+
             # Run stage - get features per box
             pool_boxes = [x.proposal_boxes for x in proposals]
             # pools features using boxes
@@ -193,6 +200,7 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
             box_features = _ScaleGradient.apply(box_features, 1.0 / self.num_cascade_stages)
             # several CNN>norm>relu layers
             box_features = self.box_head[k](box_features)
+            # store 1024 features on the proposals?
             if self.add_feature_to_prop:
                 n_proposals = [len(p) for p in proposals]
                 feats_per_image = box_features.split(n_proposals, dim=0)
@@ -205,13 +213,17 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
             # deltas predicted using linear+relu+linear[4]
             # cls_feats are the features after the linear layer in the zero-shot classifier
             # prop_score returned if with_softmax_prop. it's x>linear>relu>linear[n_classes+1]
-            scores, deltas, cls_feats, *prop_score = predictor(
+            scores, deltas, cls_feats, *prop_score = predictions = predictor(
                 box_features, classifier_info=classifier_info)
             # add deltas to boxes (no prediction)
             boxes = predictor.predict_boxes((scores, deltas), proposals)
             # just applies sigmoid or softmax depending on config
             scores = predictor.predict_probs((scores,), proposals)
             scores_per_stage.append(scores)
+            head_outputs.append((predictor, predictions, proposals))
+
+        if self.training:
+            return self._training_losses(head_outputs, targets, ann_type, classifier_info)
 
         # aggregate scores
         scores = [torch.mean(torch.stack(s), dim=0) for s in zip(*scores_per_stage)]
@@ -234,30 +246,30 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
             pred_instances[0].box_scores = proposal_scores[0][filt_idxs]
         return pred_instances
         
-    # def _training_loss(self, head_outputs, targets, ann_type, classifier_info):
-    #     losses = {}
-    #     storage = get_event_storage()
-    #     for stage, (predictor, predictions, proposals) in enumerate(head_outputs):
-    #         with storage.name_scope("stage{}".format(stage)):
-    #             if ann_type != 'box': 
-    #                 stage_losses = {}
-    #                 if ann_type in ['image', 'caption', 'captiontag']:
-    #                     weak_losses = predictor.image_label_losses(
-    #                         predictions, proposals, 
-    #                         image_labels=[x._pos_category_ids for x in targets],
-    #                         classifier_info=classifier_info,
-    #                         ann_type=ann_type)
-    #                     stage_losses.update(weak_losses)
-    #             else: # supervised
-    #                 stage_losses = predictor.losses(
-    #                     (predictions[0], predictions[1]), proposals,
-    #                     classifier_info=classifier_info)
-    #                 if self.with_image_labels:
-    #                     stage_losses['image_loss'] = predictions[0].new_zeros([1])[0]
-    #         losses.update({
-    #             k + "_stage{}".format(stage): v
-    #             for k, v in stage_losses.items()})
-    #     return losses
+    def _training_losses(self, head_outputs, targets, ann_type, classifier_info):
+        losses = {}
+        storage = get_event_storage()
+        for stage, (predictor, predictions, proposals) in enumerate(head_outputs):
+            with storage.name_scope("stage{}".format(stage)):
+                if ann_type != 'box': 
+                    stage_losses = {}
+                    if ann_type in ['image', 'caption', 'captiontag']:
+                        weak_losses = predictor.image_label_losses(
+                            predictions, proposals, 
+                            image_labels=[x._pos_category_ids for x in targets],
+                            classifier_info=classifier_info,
+                            ann_type=ann_type)
+                        stage_losses.update(weak_losses)
+                else: # supervised
+                    stage_losses = predictor.losses(
+                        (predictions[0], predictions[1]), proposals,
+                        classifier_info=classifier_info)
+                    if self.with_image_labels:
+                        stage_losses['image_loss'] = predictions[0].new_zeros([1])[0]
+            losses.update({
+                f"{k}_stage{stage}": v
+                for k, v in stage_losses.items()})
+        return losses
 
 class DeticFastRCNNOutputLayers2(DeticFastRCNNOutputLayers):
     def forward(self, x, classifier_info=(None,None,None)):
