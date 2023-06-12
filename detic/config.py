@@ -38,6 +38,8 @@ def add_detic_config(cfg):
 
     _C.MODEL.ROI_HEADS.MASK_WEIGHT = 1.0
     _C.MODEL.ROI_HEADS.ONE_CLASS_PER_PROPOSAL = False # For demo only
+    _C.MODEL.ROI_HEADS.NUM_PROPERTY_CLASSES = 0
+    _C.MODEL.ROI_HEADS.NUM_RELATION_CLASSES = 0
 
     # Caption losses
     _C.MODEL.CAP_BATCH_RATIO = 4 # Ratio between detection data and caption data
