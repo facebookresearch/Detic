@@ -20,6 +20,7 @@ __all__ = ["custom_load_egohos_json", "custom_register_egohos_instances"]
 # vocab
 
 object_classes = [
+    # 'background',
     'left hand',
     'right hand',
     '1st order interacting object by left hand',
@@ -86,7 +87,7 @@ def custom_load_egohos_json(image_root, dataset_name=None):
     return dataset_dicts
 
 def get_annotations(mask):
-    # convert masks to contours
+    # convert masks to contours (index 0 is background)
     masks = [mask == i+1 for i in range(len(object_classes))]
     contours = [_bool_mask_to_contour(m) for m in masks]
     (
@@ -96,31 +97,41 @@ def get_annotations(mask):
     ) = contours
     
     # convert to hand, object, and relation annotations
+    # if the contour is empty, it will return an empty dict
     annotations = [
-        _obj_interaction_ann(left, obj1_left, L, O1L),
-        _obj_interaction_ann(left, obj2_left, L, O2L),
-        _obj_interaction_ann(right, obj1_right, R, O1R),
-        _obj_interaction_ann(right, obj2_right, R, O2R),
-        _obj_interaction_ann(left, obj1_both, L, O1B),
-        _obj_interaction_ann(left, obj2_both, L, O2B),
-        _obj_interaction_ann(right, obj1_both, R, O1B),
-        _obj_interaction_ann(right, obj2_both, R, O2B),
+        _obj_ann(left, L),
+        _obj_ann(right, R),
+        _obj_ann(obj1_left, O1L),
+        _obj_ann(obj2_left, O2L),
+        _obj_ann(obj1_right, O1R),
+        _obj_ann(obj2_right, O2R),
+        _obj_ann(obj1_both, O1B),
+        _obj_ann(obj2_both, O2B),
+        _rel_ann(left, obj1_left),
+        _rel_ann(left, obj2_left),
+        _rel_ann(right, obj1_right),
+        _rel_ann(right, obj2_right),
+        _rel_ann(left, obj1_both),
+        _rel_ann(left, obj2_both),
+        _rel_ann(right, obj1_both),
+        _rel_ann(right, obj2_both),
+        _rel_ann(obj1_left+obj1_right+obj1_both, obj2_left+obj2_right+obj2_both),
     ]
 
     # filter empty annotations
-    return [d for d in annotations if d.get('segmentation')]
-
-def _obj_interaction_ann(hand, obj, hand_id, obj_id):
-    # given a hand object pair of contours, construct the annotations for separate+combo
-    is_interacting = hand and obj
-    property_id = 0 if is_interacting else -1
-    return [
-        _contour_to_ann(hand, category_id=hand_id, property_id=property_id),
-        _contour_to_ann(obj, category_id=obj_id, property_id=property_id),
-        _contour_to_ann(hand + obj, relation_id=0) if is_interacting else {},
-    ]
+    return [d for ds in annotations for d in ds.values() if d and d.get('segmentation')]
 
 
+def _obj_ann(obj, i):
+    return _contour_to_ann(obj, category_id=i, property_id=nhot(len(property_classes), 0))
+
+def _rel_ann(obj1, obj2):
+    return _contour_to_ann(obj1 + obj2, relation_id=nhot(len(property_classes), 0))
+
+def nhot(n, *idxs):
+    y = np.zeros(n, dtype=int)
+    y[tuple(i for i in idxs if i is not None)] = 1
+    return y
 
 def _bool_mask_to_contour(mask):
     # given a boolean mask, get the contours
