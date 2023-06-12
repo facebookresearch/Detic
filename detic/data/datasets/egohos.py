@@ -95,6 +95,8 @@ def get_annotations(mask):
         obj1_left, obj1_right, obj1_both,
         obj2_left, obj2_right, obj2_both,
     ) = contours
+    obj1 = _bool_mask_to_contour(masks[2]|masks[3]|masks[4])
+    obj2 = _bool_mask_to_contour(masks[5]|masks[6]|masks[7])
     
     # convert to hand, object, and relation annotations
     # if the contour is empty, it will return an empty dict
@@ -115,23 +117,23 @@ def get_annotations(mask):
         _rel_ann(left, obj2_both),
         _rel_ann(right, obj1_both),
         _rel_ann(right, obj2_both),
-        _rel_ann(obj1_left+obj1_right+obj1_both, obj2_left+obj2_right+obj2_both),
+        _rel_ann(obj1, obj2),
     ]
 
     # filter empty annotations
-    return [d for ds in annotations for d in ds.values() if d and d.get('segmentation')]
+    return [d for d in annotations if d]
 
 
 def _obj_ann(obj, i):
-    return _contour_to_ann(obj, category_id=i, property_id=nhot(len(property_classes), 0))
+    return _contour_to_ann(obj, category_id=i, property_id=[0])
 
 def _rel_ann(obj1, obj2):
-    return _contour_to_ann(obj1 + obj2, relation_id=nhot(len(property_classes), 0))
+    return _contour_to_ann(obj1 + obj2, relation_id=[0]) if obj1 and obj2 else None
 
-def nhot(n, *idxs):
-    y = np.zeros(n, dtype=int)
-    y[tuple(i for i in idxs if i is not None)] = 1
-    return y
+# def nhot(n, *idxs):
+#     y = np.zeros(n, dtype=int)
+#     y[tuple(i for i in idxs if i is not None)] = 1
+#     return y
 
 def _bool_mask_to_contour(mask):
     # given a boolean mask, get the contours
@@ -140,7 +142,7 @@ def _bool_mask_to_contour(mask):
     contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     return [c for c in contours if cv2.contourArea(c) >= 2]
 
-def _contour_to_ann(contours, **meta):
+def _contour_to_ann(contours, category_id=-1, **meta):
     # given contours get the proper annotation structure
     if not contours:
         return {}
@@ -150,6 +152,7 @@ def _contour_to_ann(contours, **meta):
     ]
     multi_poly = MultiPolygon(polys)
     return {
+        "category_id": category_id,
         "segmentation": [
             np.array(poly.exterior.coords).ravel().tolist()
             for poly in polys

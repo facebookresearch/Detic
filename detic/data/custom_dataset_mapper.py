@@ -31,6 +31,8 @@ class CustomDatasetMapper(DatasetMapper):
         use_tar_dataset=False,
         tarfile_path='',
         tar_index_dir='',
+        num_property_classes=0,
+        num_relation_classes=0,
         **kwargs):
         """
         add image labels
@@ -45,6 +47,8 @@ class CustomDatasetMapper(DatasetMapper):
         if self.use_tar_dataset:
             print('Using tar dataset')
             self.tar_dataset = DiskTarDataset(tarfile_path, tar_index_dir)
+        self.num_property_classes = num_property_classes
+        self.num_relation_classes = num_relation_classes
         super().__init__(is_train, **kwargs)
  
 
@@ -59,6 +63,8 @@ class CustomDatasetMapper(DatasetMapper):
             'use_tar_dataset': cfg.DATALOADER.USE_TAR_DATASET,
             'tarfile_path': cfg.DATALOADER.TARFILE_PATH,
             'tar_index_dir': cfg.DATALOADER.TAR_INDEX_DIR,
+            'num_property_classes': cfg.ROI_HEADS.NUM_PROPERTY_CLASSES,
+            'num_relation_classes': cfg.ROI_HEADS.NUM_RELATION_CLASSES,
         })
         if ret['use_diff_bs_size'] and is_train:
             if cfg.INPUT.CUSTOM_AUG == 'EfficientDetResizeCrop':
@@ -158,8 +164,8 @@ class CustomDatasetMapper(DatasetMapper):
             instances = utils.annotations_to_instances(
                 annos, image_shape, mask_format=self.instance_mask_format
             )
-            instances.gt_property_classes = get_class_vector(annos, "property_id")
-            instances.gt_relation_classes = get_class_vector(annos, "relation_id")
+            instances.gt_property_classes = get_class_vector(annos, "property_id", self.num_property_classes)
+            instances.gt_relation_classes = get_class_vector(annos, "relation_id", self.num_relation_classes)
             
             if self.recompute_boxes:
                 instances.gt_boxes = instances.gt_masks.get_bounding_boxes()
@@ -167,17 +173,26 @@ class CustomDatasetMapper(DatasetMapper):
         if self.with_ann_type:
             dataset_dict["pos_category_ids"] = dataset_dict.get(
                 'pos_category_ids', [])
-            dataset_dict["ann_type"] = \
-                self.dataset_ann[dataset_dict['dataset_source']]
-        if self.is_debug and (('pos_category_ids' not in dataset_dict) or \
-            (dataset_dict['pos_category_ids'] == [])):
+            dataset_dict["ann_type"] = self.dataset_ann[dataset_dict['dataset_source']]
+        if self.is_debug and (
+            ('pos_category_ids' not in dataset_dict) or
+            (dataset_dict['pos_category_ids'] == [])
+        ):
             dataset_dict['pos_category_ids'] = [x for x in sorted(set(
                 dataset_dict['instances'].gt_classes.tolist()
             ))]
         return dataset_dict
 
-def get_class_vector(annos, key):
-    return torch.tensor([int(obj.get(key, -1)) for obj in annos], dtype=torch.int64)
+def get_class_vector(annos, key, n):
+    return torch.tensor([
+        nhot(n, obj.get(key) or []) 
+        for obj in annos
+    ], dtype=torch.int64).reshape(len(annos), n)
+
+def nhot(n, idxs):
+    y = np.zeros(n, dtype=int)
+    y[tuple(i for i in idxs if i is not None)] = 1
+    return y
 
 # DETR augmentation
 def build_transform_gen(cfg, is_train):
