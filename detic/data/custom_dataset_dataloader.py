@@ -71,6 +71,14 @@ def _custom_train_loader_from_config(cfg, mapper=None, *, dataset=None, sampler=
     else:
         raise ValueError("Unknown training sampler: {}".format(sampler_name))
 
+    # print(len(dataset_dicts))
+    # ns = [
+    #     len(d['annotations'])
+    #     for d in dataset_dicts
+    # ]
+    # print(len(ns))
+    # print(set(ns))
+    # print(sum(n == 0 for n in ns))
     return {
         "dataset": dataset_dicts,
         "sampler": sampler,

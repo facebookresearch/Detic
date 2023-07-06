@@ -63,8 +63,8 @@ class CustomDatasetMapper(DatasetMapper):
             'use_tar_dataset': cfg.DATALOADER.USE_TAR_DATASET,
             'tarfile_path': cfg.DATALOADER.TARFILE_PATH,
             'tar_index_dir': cfg.DATALOADER.TAR_INDEX_DIR,
-            'num_property_classes': cfg.ROI_HEADS.NUM_PROPERTY_CLASSES,
-            'num_relation_classes': cfg.ROI_HEADS.NUM_RELATION_CLASSES,
+            # 'num_property_classes': cfg.MODEL.ROI_HEADS.NUM_PROPERTY_CLASSES,
+            # 'num_relation_classes': cfg.MODEL.ROI_HEADS.NUM_RELATION_CLASSES,
         })
         if ret['use_diff_bs_size'] and is_train:
             if cfg.INPUT.CUSTOM_AUG == 'EfficientDetResizeCrop':
@@ -159,14 +159,13 @@ class CustomDatasetMapper(DatasetMapper):
                     keypoint_hflip_indices=self.keypoint_hflip_indices,
                 )
                 for obj in dataset_dict.pop("annotations")
-                if obj.get("iscrowd", 0)
+                if not obj.get("iscrowd", 0)
             ]
             instances = utils.annotations_to_instances(
                 annos, image_shape, mask_format=self.instance_mask_format
             )
-            instances.gt_property_classes = get_class_vector(annos, "property_id", self.num_property_classes)
-            instances.gt_relation_classes = get_class_vector(annos, "relation_id", self.num_relation_classes)
-            
+            # instances.gt_property_classes = get_class_vector(annos, "property_id", self.num_property_classes)
+            # instances.gt_relation_classes = get_class_vector(annos, "relation_id", self.num_relation_classes)
             if self.recompute_boxes:
                 instances.gt_boxes = instances.gt_masks.get_bounding_boxes()
             dataset_dict["instances"] = utils.filter_empty_instances(instances)

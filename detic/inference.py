@@ -7,6 +7,7 @@ import os
 import numpy as np
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 # import some common detectron2 utilities
 from detectron2.config import get_cfg
@@ -33,6 +34,7 @@ BUILDIN_CLASSIFIER = {
     'objects365': os.path.join(detic_path, 'datasets/metadata/o365_clip_a+cnamefix.npy'),
     'openimages': os.path.join(detic_path, 'datasets/metadata/oid_clip_a+cname.npy'),
     'coco':       os.path.join(detic_path, 'datasets/metadata/coco_clip_a+cname.npy'),
+    'egohos':     os.path.join(detic_path, 'datasets/metadata/egohos.npy'),
 }
 
 BUILDIN_METADATA_PATH = {
@@ -40,12 +42,19 @@ BUILDIN_METADATA_PATH = {
     'objects365': 'objects365_v2_val',
     'openimages': 'oid_val_expanded',
     'coco': 'coco_2017_val',
+    'egohos': 'egohos_val',
 }
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 DEFAULT_PROMPT = 'a {}'
 
+CHECKPOINT = 'https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth'
+CONFIG = "configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml"
+
+from .data.datasets import egohos
+CHECKPOINT = 'output/Detic/Detic_EGOHOS_CLIP_SwinB_896b32_4x_ft4x_max-size/model_0009999.pth'
+CONFIG = "configs/Detic_EGOHOS_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml"
 
 def desc(x):
     if isinstance(x, dict):
@@ -69,8 +78,8 @@ class Detic(nn.Module):
         self.cfg = cfg = get_cfg()
         add_centernet_config(cfg)
         add_detic_config(cfg)
-        cfg.merge_from_file(os.path.join(detic_path, "configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml"))
-        cfg.MODEL.WEIGHTS = path_or_url('https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth')
+        cfg.merge_from_file(os.path.join(detic_path, CONFIG))
+        cfg.MODEL.WEIGHTS = path_or_url(CHECKPOINT)
         cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = box_conf_threshold  # set threshold for this model
         cfg.MODEL.ROI_BOX_HEAD.ZEROSHOT_WEIGHT_PATH = 'rand'
         cfg.MODEL.ROI_HEADS.ONE_CLASS_PER_PROPOSAL = one_class_per_proposal # For better visualization purpose. Set to False for all classes.
@@ -219,6 +228,10 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
             boxes = predictor.predict_boxes((scores, deltas), proposals)
             # just applies sigmoid or softmax depending on config
             scores = predictor.predict_probs((scores,), proposals)
+            # scores[0][:,-1] = -torch.inf
+            # scores = (F.softmax(scores[0]*1e7),)
+            # print(scores[0].shape)
+            # print(scores[0])
             scores_per_stage.append(scores)
             head_outputs.append((predictor, predictions, proposals))
 
@@ -321,7 +334,7 @@ class ZeroShotClassifier2(ZeroShotClassifier):
 
 
 
-def run(src, *vocab, out_file=True, **kw):
+def run(src, vocab, out_file=True, **kw):
     """Run multi-target tracker on a particular sequence.
     """
     import tqdm
@@ -338,7 +351,7 @@ def run(src, *vocab, out_file=True, **kw):
     #         raise RuntimeError("Could not find a video codec that works")
     # sv.VideoSink = VideoSink2
 
-
+    kw.setdefault('masks', True)
     model = Detic(**kw)
 
     if out_file is True:
@@ -348,10 +361,11 @@ def run(src, *vocab, out_file=True, **kw):
 
     if vocab:
         model.set_vocab(vocab)
+        model.set_vocab([c for c in model.labels if c != 'interacting'])
     classes = model.labels
     print("classes:", classes)
 
-    box_annotator = sv.BoxAnnotator()
+    box_annotator = sv.BoxAnnotator(text_scale=0.4, text_padding=1)
     mask_annotator = sv.MaskAnnotator()
     masks_on = model.cfg.MODEL.MASK_ON
     print("using masks:", masks_on)
@@ -359,7 +373,8 @@ def run(src, *vocab, out_file=True, **kw):
     video_info = sv.VideoInfo.from_video_path(src)
 
     with sv.VideoSink(out_file, video_info=video_info) as s:
-        for i, frame in tqdm.tqdm(enumerate(sv.get_video_frames_generator(src)), total=video_info.total_frames):
+        pbar = tqdm.tqdm(enumerate(sv.get_video_frames_generator(src)), total=video_info.total_frames)
+        for i, frame in pbar:
             # if i > 100: break
             outputs = model(frame)
             detections = sv.Detections.from_detectron2(outputs)
@@ -369,6 +384,9 @@ def run(src, *vocab, out_file=True, **kw):
                 confidence=outputs["instances"].scores.cpu().numpy(),
                 class_id=outputs["instances"].pred_classes.cpu().numpy().astype(int),
             )
+            if masks_on:
+                tqdm.tqdm.write(f'{detections.mask.shape}')
+            pbar.set_description(', '.join(classes[i] for i in detections.class_id) or 'nothing')
             frame = frame.copy()
             if masks_on:
                 frame = mask_annotator.annotate(

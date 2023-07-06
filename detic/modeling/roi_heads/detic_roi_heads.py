@@ -114,7 +114,12 @@ class DeticCascadeROIHeads(CascadeROIHeads):
             prev_pred_boxes = self.box_predictor[k].predict_boxes(
                 (predictions[0], predictions[1]), proposals)
             head_outputs.append((self.box_predictor[k], predictions, proposals))
-        
+            # s = head_outputs[-1][1][0]
+            # print(s.shape)
+            # s[:, -1] = -torch.inf
+            # print(s[:5])
+            # input()
+            
         if self.training:
             losses = {}
             storage = get_event_storage()
@@ -175,6 +180,8 @@ class DeticCascadeROIHeads(CascadeROIHeads):
             if ann_type in ['box', 'prop', 'proptag']:
                 proposals = self.label_and_sample_proposals(
                     proposals, targets)
+                # print([p.gt_classes for p in proposals])
+                # print(targets)
             else:
                 proposals = self.get_top_proposals(proposals)
             
