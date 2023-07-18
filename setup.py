@@ -10,7 +10,7 @@ setuptools.setup(
     # packages=['detic', 'centernet'],
     # package_dir={'detic': 'detic', 'centernet': 'third_party/CenterNet2/centernet'},
     install_requires=[
-        'torch', 'torchvision', 'supervision',
+        'torch', 'torchvision', 'supervision', 'timm',
         'clip @ git+https://github.com/openai/CLIP.git@main#egg=clip',
         'detectron2 @ git+https://github.com/facebookresearch/detectron2.git@main#egg=detectron2',
     ],
