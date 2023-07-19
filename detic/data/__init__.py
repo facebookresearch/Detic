@@ -5,3 +5,4 @@ from .datasets import objects365
 from .datasets import oid
 from .datasets import coco_zeroshot
 from .datasets import egohos
+from .datasets import ssv2
