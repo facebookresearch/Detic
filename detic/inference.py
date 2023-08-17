@@ -91,13 +91,24 @@ def path_or_url(url):
     return path if os.path.isfile(path) else url
 
 class Detic(nn.Module):
-    def __init__(self, vocab=None, conf_threshold=0.5, box_conf_threshold=0.5, masks=False, one_class_per_proposal=True, patch_for_embeddings=True, prompt=DEFAULT_PROMPT, device=device):
+    def __init__(
+            self, vocab=None, conf_threshold=0.5, box_conf_threshold=0.5, 
+            masks=False, one_class_per_proposal=True, patch_for_embeddings=True, 
+            prompt=DEFAULT_PROMPT, device=device, config=None, checkpoint=None,
+    ):
         super().__init__()
         self.cfg = cfg = get_cfg()
         add_centernet_config(cfg)
         add_detic_config(cfg)
 
-        checkpoint, config_file = VERSIONS.get(vocab) or VERSIONS[None]
+        # get latest checkpoint for that config (if it exists)
+        if config and not checkpoint:
+            checkpoint = (glob.glob(os.path.join('output/Detic', os.path.splitext(os.path.basename(config_file))[0], 'model_*.pth')) or [None])[0]
+
+        # get default config/checkpoint for that vocab
+        _cf, _ch = VERSIONS.get(vocab) or VERSIONS[None]
+        config = config or _cf
+        checkpoint = checkpoint or _ch
         print(checkpoint)
 
         cfg.merge_from_file(os.path.join(detic_path, config_file))
@@ -110,6 +121,7 @@ class Detic(nn.Module):
         cfg.MODEL.ROI_BOX_HEAD.CAT_FREQ_PATH = os.path.join(detic_path, cfg.MODEL.ROI_BOX_HEAD.CAT_FREQ_PATH)
         # print(cfg)
         self.predictor = DefaultPredictor(cfg)
+        self.cfg = cfg
 
         if patch_for_embeddings:
             self.predictor.model.roi_heads.__class__ = DeticCascadeROIHeads2
@@ -123,7 +135,8 @@ class Detic(nn.Module):
         self.text_encoder = build_text_encoder(pretrain=True)
         self.text_encoder.eval()
 
-        self.set_vocab(vocab, prompt)
+        if vocab:
+            self.set_vocab(vocab, prompt)
         
     def set_vocab(self, vocab, prompt=DEFAULT_PROMPT):
         if isinstance(vocab, (np.ndarray, torch.Tensor)):
@@ -147,9 +160,9 @@ class Detic(nn.Module):
             self.text_features = classifier
         else:
             vocab = 'lvis' if vocab is None else vocab
-            self.vocab_key = BUILDIN_METADATA_PATH[vocab]
-            self.metadata = metadata = MetadataCatalog.get(BUILDIN_METADATA_PATH[vocab])
-            classifier = BUILDIN_CLASSIFIER[vocab]    
+            self.vocab_key = BUILDIN_METADATA_PATH.get(vocab) or self.cfg.DATASETS.TEST[0]
+            self.metadata = metadata = MetadataCatalog.get(self.vocab_key)
+            classifier = BUILDIN_CLASSIFIER.get(vocab) or self.cfg.MODEL.ZEROSHOT_WEIGHT_PATH
         
         self.labels = np.asarray(metadata.thing_classes)
         reset_cls_test(self.predictor.model, classifier, len(metadata.thing_classes))
