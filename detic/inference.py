@@ -101,6 +101,10 @@ class Detic(nn.Module):
         add_centernet_config(cfg)
         add_detic_config(cfg)
 
+        if os.path.isfile(vocab):
+            vocab = [x.strip() for x in open(vocab).read().splitlines()]
+            vocab = [x for x in vocab if x and not x.startswith(';')
+
         # get latest checkpoint for that config (if it exists)
         if config and not checkpoint:
             checkpoint = (glob.glob(os.path.join('output/Detic', os.path.splitext(os.path.basename(config_file))[0], 'model_*.pth')) or [None])[0]
