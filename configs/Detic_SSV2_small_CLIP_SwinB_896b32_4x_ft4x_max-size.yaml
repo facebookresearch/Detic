@@ -2,16 +2,16 @@ _BASE_: "Base-C2_L_R5021k_640b64_4x.yaml"
 MODEL:
   ROI_BOX_HEAD:
     USE_SIGMOID_CE: True
-    USE_FED_LOSS: True
+    USE_FED_LOSS: False
     USE_ZEROSHOT_CLS: True
     IMAGE_LABEL_LOSS: 'max_size'
     ZEROSHOT_WEIGHT_PATH: datasets/metadata/ssv2_clip512.npy
     #ZEROSHOT_WEIGHT_PATH: '/scratch/irr2020/VLPart/VLPart/datasets/metadata/ssv2_clip_RN50_a+cname.npy'
     # ZEROSHOT_WEIGHT_INFERENCE_PATH: '/scratch/irr2020/VLPart/VLPart/datasets/metadata/ssv2_clip_RN50_a+cname.npy'
-    CAT_FREQ_PATH: 'datasets/metadata/ssv2_train_cat_info.json'
-    FED_LOSS_NUM_CAT: 47
+    CAT_FREQ_PATH: datasets/metadata/ssv2_train_cat_info.json
+    FED_LOSS_NUM_CAT: 44
   ROI_HEADS:
-    NUM_CLASSES: 47
+    NUM_CLASSES: 44
   BACKBONE:
     NAME: build_swintransformer_fpn_backbone
   SWIN:
@@ -19,18 +19,19 @@ MODEL:
   FPN:
     IN_FEATURES: ["swin1", "swin2", "swin3"]
   WEIGHTS: "models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth"
+  MASK_ON: False
 SOLVER:
   CHECKPOINT_PERIOD: 1000
-  MAX_ITER: 200000
+  MAX_ITER: 400000
   IMS_PER_BATCH: 32
-  BASE_LR: 0.0001
-  WARMUP_ITERS: 1000
+  BASE_LR: 0.0003
+  WARMUP_ITERS: 600
   WARMUP_FACTOR: 0.001
 DATASETS:
-  TRAIN: ("ssv2_train",)
-  TEST: ("ssv2_val",)
+  TRAIN: ("ssv2_train_1k",)
+  TEST: ("ssv2_val_1k",)
 TEST:
-  EVAL_PERIOD: 10000
+  EVAL_PERIOD: 1000
 DATALOADER:
   SAMPLER_TRAIN: "MultiDatasetSampler"
   DATASET_RATIO: [1]
@@ -42,7 +43,9 @@ DATALOADER:
   FILTER_EMPTY_ANNOTATIONS: False
   MULTI_DATASET_GROUPING: True
   DATASET_ANN: ['box'] #['box', 'image']
-  NUM_WORKERS: 12
+  NUM_WORKERS: 1
+INPUT:
+  LEFT_RIGHT_MATTERS: True
 WITH_IMAGE_LABELS: True
 
 # _BASE_: "Base-C2_L_R5021k_640b64_4x.yaml"

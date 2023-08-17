@@ -5,11 +5,11 @@ MODEL:
     IMAGE_LABEL_LOSS: 'max_size'
     ZEROSHOT_WEIGHT_PATH: 'datasets/metadata/egohos.npy'
     CAT_FREQ_PATH: 'datasets/metadata/egohos_train_cat_count.json'
-    FED_LOSS_NUM_CAT: 9
+    FED_LOSS_NUM_CAT: 8
   ROI_HEADS:
-    NUM_CLASSES: 9
-    NUM_PROPERTY_CLASSES: 1
-    NUM_RELATION_CLASSES: 1
+    NUM_CLASSES: 8
+    # NUM_PROPERTY_CLASSES: 1
+    # NUM_RELATION_CLASSES: 1
   BACKBONE:
     NAME: build_swintransformer_fpn_backbone
   SWIN:
@@ -47,6 +47,8 @@ DATALOADER:
   MULTI_DATASET_GROUPING: True
   DATASET_ANN: ['box'] #['box', 'image']
   NUM_WORKERS: 1
+INPUT:
+  LEFT_RIGHT_MATTERS: True
 WITH_IMAGE_LABELS: True
 
 # _BASE_: "Base-C2_L_R5021k_640b64_4x.yaml"

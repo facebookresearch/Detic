@@ -2,7 +2,6 @@
 import logging
 import os
 import numpy as np
-
 from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.structures import BoxMode
 from detectron2.utils.file_io import PathManager
@@ -20,6 +19,7 @@ logger = logging.getLogger('detectron2.vlpart.data.datasets.ssv2')
 
 ATTR_TYPE_END_IDXS = [0, 30, 41, 55, 59]
 ATTR_TYPE_BG_IDXS = [29, 38, 54, 58]
+
 
 
 def load_json(json_file, image_root, dataset_name=None, extra_annotation_keys=None):
@@ -75,6 +75,9 @@ def load_json(json_file, image_root, dataset_name=None, extra_annotation_keys=No
     #   'id': 42986},
     #  ...]
     anns = [lvis_api.img_ann_map[img_id] for img_id in img_ids]
+    for iimg, anns_per_image in enumerate(anns):
+        for iann, ann in enumerate(anns_per_image):
+            anns[iimg][iann]['area'] = ann['bbox'][2] * ann['bbox'][3]
 
     # Sanity check that each annotation has a unique id
     ann_ids = [ann["id"] for anns_per_image in anns for ann in anns_per_image]
@@ -124,7 +127,6 @@ def load_json(json_file, image_root, dataset_name=None, extra_annotation_keys=No
             # file is buggy.
             assert anno["image_id"] == image_id
             obj = {"bbox": anno["bbox"], "bbox_mode": BoxMode.XYWH_ABS}
-            obj['area'] = anno['bbox'][2] * anno['bbox'][3]
 
             if dataset_name is not None and "thing_dataset_id_to_contiguous_id" in meta:
                 obj["category_id"] = meta["thing_dataset_id_to_contiguous_id"][
@@ -159,7 +161,31 @@ def load_json(json_file, image_root, dataset_name=None, extra_annotation_keys=No
         record["annotations"] = objs
         dataset_dicts.append(record)
 
+
+    zs_path = "datasets/metadata/ssv2_clip512.npy"
+    if not os.path.isfile(zs_path):
+        np.save(zs_path, get_zs_weight(get_labels()))
     return dataset_dicts
+
+def get_labels():
+    data = SSV2_CATEGORIES
+    cat_names = [x['name'] for x in sorted(data, key=lambda x: x['id'])]
+    sentences = []
+    for s in cat_names:
+        # find predicates
+        if '(' in s and ')' in s:
+            if 'is-' in s:
+                sentences.append('this is '+s.replace('(is-',''))
+            else:
+                sentences.append('this is '+s)
+            sentences[-1] = sentences[-1].replace('(','').replace(')','').replace('is fits','is').replace('-',' ').replace('this is',"it's")
+        # else its a noun
+        else:
+            sentences.append('a '+s)
+
+    for s in sentences:
+        print(s)
+    return sentences
 
 
 def get_instances_meta(dataset_name):
@@ -181,20 +207,11 @@ def _get_object_and_attribute_classes():
     thing_classes = [k["name"] for k in categories]
     #predicate_classes = [k["name"] for k in predicate_categories]
 
-    zs_path = "datasets/metadata/ssv2_clip512.npy"
-    if not os.path.isfile(zs_path):
-        np.save(zs_path, _get_zs_weight(thing_classes))
-
     return {
         "thing_classes": thing_classes,
         #"predicate_classes": predicate_classes,
         "thing_dataset_id_to_contiguous_id": thing_dataset_id_to_contiguous_id,
     }
-
-def _get_zs_weight(classes):
-    text_encoder = build_text_encoder(pretrain=True)
-    text_encoder.eval()
-    return text_encoder(classes).detach().cpu().numpy()
 
 
 def _get_ssv2_instances_meta():
@@ -248,6 +265,16 @@ def register_all_ssv2(root):
             os.path.join('/vast/work/ptg', image_root),
         )
 
+def get_zs_weight(classes):
+    text_encoder = build_text_encoder(pretrain=True)
+    text_encoder.eval()
+    return text_encoder(classes).detach().cpu().numpy()
+
+zs_path = "datasets/metadata/ssv2_clip512.npy"
+if not os.path.isfile(zs_path):
+    np.save(zs_path, get_zs_weight(get_labels()))
+
+
 #_PACO_GOLDEN = {
 #    "imagenet_golden_paco_parsed": ("imagenet/train", "imagenet/imagenet_golden_paco_parsed.json"),
 #    "imagenet_golden_paco_parsed_swinbase": ("imagenet/train", "imagenet/imagenet_golden_paco_parsed_swinbase.json"),
@@ -261,6 +288,9 @@ def register_all_ssv2(root):
 #            os.path.join(root, json_file) if "://" not in json_file else json_file,
 #            os.path.join(root, image_root),
 #        )
+
+
+
 
 _root = os.getenv("DETECTRON2_DATASETS", "/scratch/work/ptg")
 register_all_ssv2(_root)

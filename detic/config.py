@@ -50,6 +50,8 @@ def add_detic_config(cfg):
     _C.MODEL.DYNAMIC_CLASSIFIER = False
     _C.MODEL.NUM_SAMPLE_CATS = 50
 
+    _C.MODEL.FREEZE_TRAIN_ONLY_MATCHING = ''
+
     # Different classifiers in testing, used in cross-dataset evaluation
     _C.MODEL.RESET_CLS_TESTS = False
     _C.MODEL.TEST_CLASSIFIERS = []
@@ -119,8 +121,11 @@ def add_detic_config(cfg):
     _C.INPUT.TRAIN_SIZE = 640
     _C.INPUT.TEST_SIZE = 640
     _C.INPUT.SCALE_RANGE = (0.1, 2.)
+    _C.INPUT.LEFT_RIGHT_MATTERS = False
     # 'default' for fixed short/ long edge, 'square' for max size=INPUT.SIZE
     _C.INPUT.TEST_INPUT_TYPE = 'default' 
+
+    _C.TEST.EVAL_PERIOD = 1000
 
     _C.FIND_UNUSED_PARAM = True
     _C.EVAL_PRED_AR = False

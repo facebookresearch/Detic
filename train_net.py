@@ -1,6 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
 import logging
 import os
+import re
 import sys
 from collections import OrderedDict
 import torch
@@ -70,7 +71,7 @@ def do_test(cfg, model):
         evaluator_type = MetadataCatalog.get(dataset_name).evaluator_type
 
         if evaluator_type == "lvis" or cfg.GEN_PSEDO_LABELS:
-            evaluator = LVISEvaluator(dataset_name, cfg, True, output_folder)
+            evaluator = LVISEvaluator(dataset_name, None, True, output_folder)
         elif evaluator_type == 'coco':
             if dataset_name == 'coco_generalized_zeroshot_val':
                 # Additionally plot mAP for 'seen classes' and 'unseen classes'
@@ -93,6 +94,7 @@ def do_test(cfg, model):
     return results
 
 def do_train(cfg, model, resume=False):
+    assert cfg.TEST.EVAL_PERIOD > 0
     model.train()
     if cfg.SOLVER.USE_CUSTOM_SOLVER:
         optimizer = build_custom_optimizer(cfg, model)
@@ -182,6 +184,7 @@ def do_train(cfg, model, resume=False):
             scheduler.step()
 
             if (cfg.TEST.EVAL_PERIOD > 0
+                # and iteration > 0
                 and iteration % cfg.TEST.EVAL_PERIOD == 0
                 and iteration != max_iter):
                 do_test(cfg, model)
@@ -222,6 +225,17 @@ def main(args):
     cfg = setup(args)
 
     model = build_model(cfg)
+
+    if cfg.MODEL.FREEZE_TRAIN_ONLY_MATCHING:
+        print('freezing most model weights:')
+        for name, param in model.named_parameters():
+            param.requires_grad = bool(re.match(
+                cfg.MODEL.FREEZE_TRAIN_ONLY_MATCHING, 
+                name))
+            if param.requires_grad:
+                print('only training:', name, param.requires_grad)
+        # input()
+
     logger.info("Model:\n{}".format(model))
     if args.eval_only:
         DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(

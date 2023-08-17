@@ -40,7 +40,7 @@ def build_custom_augmentation(cfg, is_train, scale=None, size=None, \
     else:
         assert 0, cfg.INPUT.CUSTOM_AUG
 
-    if is_train:
+    if is_train and not cfg.INPUT.LEFT_RIGHT_MATTERS:
         augmentation.append(T.RandomFlip())
     return augmentation
 

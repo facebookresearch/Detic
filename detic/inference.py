@@ -1,5 +1,5 @@
-from detectron2.utils.logger import setup_logger
-setup_logger()
+# from detectron2.utils.logger import setup_logger
+# setup_logger()
 
 # import some common libraries
 import os
@@ -27,6 +27,7 @@ from detic.config import add_detic_config
 from detic.modeling.utils import reset_cls_test
 from detic.modeling.text.text_encoder import build_text_encoder
 from centernet.config import add_centernet_config
+from detic.data import datasets
 
 
 BUILDIN_CLASSIFIER = {
@@ -35,6 +36,7 @@ BUILDIN_CLASSIFIER = {
     'openimages': os.path.join(detic_path, 'datasets/metadata/oid_clip_a+cname.npy'),
     'coco':       os.path.join(detic_path, 'datasets/metadata/coco_clip_a+cname.npy'),
     'egohos':     os.path.join(detic_path, 'datasets/metadata/egohos.npy'),
+    'ssv2':     os.path.join(detic_path, 'datasets/metadata/ssv2_clip512.npy'),
 }
 
 BUILDIN_METADATA_PATH = {
@@ -43,6 +45,7 @@ BUILDIN_METADATA_PATH = {
     'openimages': 'oid_val_expanded',
     'coco': 'coco_2017_val',
     'egohos': 'egohos_val',
+    'ssv2': 'ssv2_val',
 }
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -55,6 +58,21 @@ CONFIG = "configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml"
 # from .data.datasets import egohos
 # CHECKPOINT = 'output/Detic/Detic_EGOHOS_CLIP_SwinB_896b32_4x_ft4x_max-size/model_0009999.pth'
 # CONFIG = "configs/Detic_EGOHOS_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml"
+
+VERSIONS = {
+    None: (
+        'https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth',
+        'configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml'
+    ),
+    'egohos': (
+        'output/Detic/Detic_EGOHOS_CLIP_SwinB_896b32_4x_ft4x_max-size/model_0133999.pth',
+        'configs/Detic_EGOHOS_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml'
+    ),
+    'ssv2': (
+        'output/Detic/Detic_SSV2_small_CLIP_SwinB_896b32_4x_ft4x_max-size/model_0032999.pth',
+        'configs/Detic_SSV2_small_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml'
+    ),
+}
 
 def desc(x):
     if isinstance(x, dict):
@@ -78,8 +96,12 @@ class Detic(nn.Module):
         self.cfg = cfg = get_cfg()
         add_centernet_config(cfg)
         add_detic_config(cfg)
-        cfg.merge_from_file(os.path.join(detic_path, CONFIG))
-        cfg.MODEL.WEIGHTS = path_or_url(CHECKPOINT)
+
+        checkpoint, config_file = VERSIONS.get(vocab) or VERSIONS[None]
+        print(checkpoint)
+
+        cfg.merge_from_file(os.path.join(detic_path, config_file))
+        cfg.MODEL.WEIGHTS = path_or_url(checkpoint)
         cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = box_conf_threshold  # set threshold for this model
         cfg.MODEL.ROI_BOX_HEAD.ZEROSHOT_WEIGHT_PATH = 'rand'
         cfg.MODEL.ROI_HEADS.ONE_CLASS_PER_PROPOSAL = one_class_per_proposal # For better visualization purpose. Set to False for all classes.
@@ -352,16 +374,16 @@ def run(src, vocab, out_file=True, **kw):
     # sv.VideoSink = VideoSink2
 
     kw.setdefault('masks', True)
-    model = Detic(**kw)
+    model = Detic(vocab, **kw)
 
     if out_file is True:
         out_file='detic_'+os.path.basename(src)
     assert out_file
     print("Writing to:", os.path.abspath(out_file))
 
-    if vocab:
-        model.set_vocab(vocab)
-        model.set_vocab([c for c in model.labels if c != 'interacting'])
+    # if vocab:
+    #     model.set_vocab(vocab)
+    #     model.set_vocab([c for c in model.labels if c != 'interacting'])
     classes = model.labels
     print("classes:", classes)
 
@@ -370,6 +392,9 @@ def run(src, vocab, out_file=True, **kw):
     masks_on = model.cfg.MODEL.MASK_ON
     print("using masks:", masks_on)
 
+    single_class = model.cfg.MODEL.ROI_HEADS.ONE_CLASS_PER_PROPOSAL
+    print("single class:", single_class)
+
     video_info = sv.VideoInfo.from_video_path(src)
 
     with sv.VideoSink(out_file, video_info=video_info) as s:
@@ -377,15 +402,18 @@ def run(src, vocab, out_file=True, **kw):
         for i, frame in pbar:
             # if i > 100: break
             outputs = model(frame)
-            detections = sv.Detections.from_detectron2(outputs)
+            # detections = sv.Detections.from_detectron2(outputs)
+
+            # bbox_unique, iv = model.group_proposals(bbox)
+
             detections = sv.Detections(
                 xyxy=outputs["instances"].pred_boxes.tensor.cpu().numpy(),
                 mask=outputs["instances"].pred_masks.cpu().numpy() if hasattr(outputs["instances"], 'pred_masks') else None,
                 confidence=outputs["instances"].scores.cpu().numpy(),
                 class_id=outputs["instances"].pred_classes.cpu().numpy().astype(int),
             )
-            if masks_on:
-                tqdm.tqdm.write(f'{detections.mask.shape}')
+            # if masks_on:
+            #     tqdm.tqdm.write(f'{detections.mask.shape}')
             pbar.set_description(', '.join(classes[i] for i in detections.class_id) or 'nothing')
             frame = frame.copy()
             if masks_on:
