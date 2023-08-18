@@ -139,17 +139,24 @@ class Detic(nn.Module):
         self.text_encoder = build_text_encoder(pretrain=True)
         self.text_encoder.eval()
 
-        if vocab:
-            self.set_vocab(vocab, prompt)
+        self.set_labels(vocab, prompt=prompt)
         
-    def set_vocab(self, vocab, prompt=DEFAULT_PROMPT):
-        if isinstance(vocab, (np.ndarray, torch.Tensor)):
+    def set_labels(self, vocab, thing_classes=None, *, prompt=DEFAULT_PROMPT):
+        if isinstance(vocab, np.ndarray) and vocab.ndim == 1:
             vocab = vocab.tolist()
+        if isinstance(vocab, torch.Tensor):
+            assert vocab.ndim == 2 and vocab.shape[1] == 512, "Expected vocab shape (N, 512)."
+            if thing_classes is None:
+                thing_classes = list(range(vocab.shape[0]))
+            self.metadata_name = '__vocab:' + ','.join(thing_classes)
+            classifier = vocab.T
         if isinstance(vocab, (list, tuple)):
-            self.vocab_key = '__vocab:' + ','.join(vocab)
-            self.metadata = metadata = MetadataCatalog.get(self.vocab_key)
+            if thing_classes is None:
+                thing_classes = vocab
+            self.metadata_name = '__vocab:' + ','.join(thing_classes)
+            self.metadata = metadata = MetadataCatalog.get(self.metadata_name)
             try:
-                metadata.thing_classes = list(vocab)
+                metadata.thing_classes = list(thing_classes)
                 metadata.thing_colors = [tuple(random_color(rgb=True, maximum=1)) for _ in metadata.thing_classes]
             except (AttributeError, AssertionError):
                 pass
@@ -162,17 +169,24 @@ class Detic(nn.Module):
                     [prompt.format(x) for x in vocab]
                 ).detach().permute(1, 0).contiguous().cpu()
             self.text_features = classifier
-        else:
+        elif isinstance(vocab, str):
             vocab = 'lvis' if vocab is None else vocab
             self.vocab_key = BUILDIN_METADATA_PATH.get(vocab) or self.cfg.DATASETS.TEST[0]
             self.metadata = metadata = MetadataCatalog.get(self.vocab_key)
             classifier = BUILDIN_CLASSIFIER.get(vocab) or self.cfg.MODEL.ZEROSHOT_WEIGHT_PATH
+        else:
+            raise ValueError("Invalid vocab. Must be a list of text classes.")   
         
         self.labels = np.asarray(metadata.thing_classes)
         reset_cls_test(self.predictor.model, classifier, len(metadata.thing_classes))
+    # alias
+    set_vocab = set_labels
 
     def forward(self, im):
-        return self.predictor(im)
+        out = self.predictor(im)
+        cid = out['instances'].pred_classes.detach().int().cpu().numpy()
+        out['instances'].pred_labels = self.labels[cid]
+        return out
 
     def draw(self, im, outputs):
         v = Visualizer(im[:, :, ::-1], self.metadata, instance_mode=ColorMode.SEGMENTATION)
