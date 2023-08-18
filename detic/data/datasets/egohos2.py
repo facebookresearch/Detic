@@ -216,12 +216,12 @@ def custom_load_json(image_root, meta, name, split, class_offset=0):
     # create dataset (or )
     cache_fname = os.path.join(image_root, 'detectron2_dataset.pkl')
     if not os.path.isfile(cache_fname):
-        logger.info('Creating dataset dicts for {image_root} {split}')
+        logger.info(f'Creating dataset dicts for {image_root} {split}')
         dataset_dicts = create_dataset_dict(image_root, split, class_offset=class_offset)
         with open(cache_fname, 'wb') as f:
             pickle.dump({'dataset': dataset_dicts}, f)
     else:
-        logger.info(f"Using cached {dataset_name} dataset", cache_fname)
+        logger.info(f"Using cached {dataset_name} dataset {cache_fname}")
         with open(cache_fname, 'rb') as f:
             d = pickle.load(f)
             dataset_dicts = d['dataset']

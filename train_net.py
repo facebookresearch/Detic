@@ -234,7 +234,7 @@ def main(args):
                 name))
             if param.requires_grad:
                 print('only training:', name, param.requires_grad)
-        # input()
+        #input()
 
     logger.info("Model:\n{}".format(model))
     if args.eval_only:

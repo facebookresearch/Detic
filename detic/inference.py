@@ -103,7 +103,7 @@ class Detic(nn.Module):
 
         if os.path.isfile(vocab):
             vocab = [x.strip() for x in open(vocab).read().splitlines()]
-            vocab = [x for x in vocab if x and not x.startswith(';')
+            vocab = [x for x in vocab if x and not x.startswith(';')]
 
         # get latest checkpoint for that config (if it exists)
         if config and not checkpoint:
@@ -140,7 +140,8 @@ class Detic(nn.Module):
         self.text_encoder.eval()
 
         self.set_labels(vocab, prompt=prompt)
-        
+
+
     def set_labels(self, vocab, thing_classes=None, *, prompt=DEFAULT_PROMPT):
         if isinstance(vocab, np.ndarray) and vocab.ndim == 1:
             vocab = vocab.tolist()
