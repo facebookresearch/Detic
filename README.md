@@ -43,7 +43,7 @@ For example, to run our [21K model](docs/MODEL_ZOO.md#cross-dataset-evaluation) 
 ~~~
 mkdir models
 wget https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth -O models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth
-wget https://web.eecs.umich.edu/~fouhey/fun/desk/desk.jpg
+wget https://eecs.engin.umich.edu/~fouhey/fun/desk/desk.jpg
 python demo.py --config-file configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml --input desk.jpg --output out.jpg --vocabulary lvis --opts MODEL.WEIGHTS models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth
 ~~~
 
