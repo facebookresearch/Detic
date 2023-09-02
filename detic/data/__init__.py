@@ -4,6 +4,6 @@ from .datasets import cc
 from .datasets import objects365
 from .datasets import oid
 from .datasets import coco_zeroshot
-from .datasets import egohos2
-from .datasets import ssv2
+# from .datasets import egohos2
+# from .datasets import ssv2
 # from .datasets import yolo_x

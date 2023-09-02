@@ -4,6 +4,7 @@
 # import some common libraries
 import os
 # import sys
+import glob
 import numpy as np
 import torch
 from torch import nn
@@ -101,21 +102,21 @@ class Detic(nn.Module):
         add_centernet_config(cfg)
         add_detic_config(cfg)
 
-        if os.path.isfile(vocab):
+        if isinstance(vocab, str) and os.path.isfile(vocab):
             vocab = [x.strip() for x in open(vocab).read().splitlines()]
             vocab = [x for x in vocab if x and not x.startswith(';')]
 
         # get latest checkpoint for that config (if it exists)
         if config and not checkpoint:
-            checkpoint = (glob.glob(os.path.join('output/Detic', os.path.splitext(os.path.basename(config_file))[0], 'model_*.pth')) or [None])[0]
+            checkpoint = (glob.glob(os.path.join('output/Detic', os.path.splitext(os.path.basename(config))[0], 'model_*.pth')) or [None])[0]
 
         # get default config/checkpoint for that vocab
-        _cf, _ch = VERSIONS.get(vocab) or VERSIONS[None]
+        _ch, _cf = (VERSIONS.get(vocab) if isinstance(vocab, str) else None) or VERSIONS[None]
         config = config or _cf
         checkpoint = checkpoint or _ch
         print(checkpoint)
 
-        cfg.merge_from_file(os.path.join(detic_path, config_file))
+        cfg.merge_from_file(os.path.join(detic_path, config))
         cfg.MODEL.WEIGHTS = path_or_url(checkpoint)
         cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = box_conf_threshold  # set threshold for this model
         cfg.MODEL.ROI_BOX_HEAD.ZEROSHOT_WEIGHT_PATH = 'rand'
@@ -386,6 +387,29 @@ class ZeroShotClassifier2(ZeroShotClassifier):
         return x, x_features  # ++ add x_features
 
 
+import supervision as sv
+class Visualizer:
+    def __init__(self, model) -> None:
+        self.model = model
+        self.ba = sv.BoxAnnotator(text_scale=0.4, text_padding=1)
+        self.ma = sv.MaskAnnotator()
+
+    def as_detections(self, outputs):
+        return sv.Detections(
+            xyxy=outputs["instances"].pred_boxes.tensor.cpu().numpy(),
+            mask=outputs["instances"].pred_masks.cpu().numpy() if hasattr(outputs["instances"], 'pred_masks') else None,
+            confidence=outputs["instances"].scores.cpu().numpy(),
+            class_id=outputs["instances"].pred_classes.cpu().numpy().astype(int),
+        )
+
+    def draw(self, frame, detections):
+        labels = [
+            f"{self.model.labels[class_id]} {confidence:0.2f}"
+            for _, _, confidence, class_id, _
+            in detections
+        ]
+        frame = self.ma.annotate(scene=frame, detections=detections)
+        frame = self.ba.annotate(scene=frame, detections=detections, labels=labels)
 
 
 def run(src, vocab, out_file=True, **kw):
@@ -419,8 +443,7 @@ def run(src, vocab, out_file=True, **kw):
     classes = model.labels
     print("classes:", classes)
 
-    box_annotator = sv.BoxAnnotator(text_scale=0.4, text_padding=1)
-    mask_annotator = sv.MaskAnnotator()
+    vis = Visualizer(model)
     masks_on = model.cfg.MODEL.MASK_ON
     print("using masks:", masks_on)
 
@@ -434,34 +457,10 @@ def run(src, vocab, out_file=True, **kw):
         for i, frame in pbar:
             # if i > 100: break
             outputs = model(frame)
-            # detections = sv.Detections.from_detectron2(outputs)
-
             # bbox_unique, iv = model.group_proposals(bbox)
-
-            detections = sv.Detections(
-                xyxy=outputs["instances"].pred_boxes.tensor.cpu().numpy(),
-                mask=outputs["instances"].pred_masks.cpu().numpy() if hasattr(outputs["instances"], 'pred_masks') else None,
-                confidence=outputs["instances"].scores.cpu().numpy(),
-                class_id=outputs["instances"].pred_classes.cpu().numpy().astype(int),
-            )
-            # if masks_on:
-            #     tqdm.tqdm.write(f'{detections.mask.shape}')
+            detections = vis.as_detections(outputs)
             pbar.set_description(', '.join(classes[i] for i in detections.class_id) or 'nothing')
-            frame = frame.copy()
-            if masks_on:
-                frame = mask_annotator.annotate(
-                    scene=frame,
-                    detections=detections,
-                )
-            frame = box_annotator.annotate(
-                scene=frame,
-                detections=detections,
-                labels=[
-                    f"{classes[class_id]} {confidence:0.2f}"
-                    for _, _, confidence, class_id, _
-                    in detections
-                ]
-            )
+            vis.draw(frame.copy(), detections)
             s.write_frame(frame)
     if s._VideoSink__writer is None:
         s._VideoSink__writer.release()
