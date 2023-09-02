@@ -1,4 +1,6 @@
-dependencies = ['torch', 'torchvision', 'supervision', 'timm', 'clip', 'detectron2']
+dependencies = [
+    'torch', #'torchvision', 'supervision', 'timm', 'clip', 'detectron2'
+]
 
 
 def _install():
