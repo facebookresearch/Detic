@@ -2,7 +2,7 @@ third_party/detectron2
 ./models
 configs-experimental
 experiments
-# output dir
+output dir
 index.html
 data/*
 slurm/
