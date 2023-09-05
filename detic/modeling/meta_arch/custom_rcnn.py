@@ -88,15 +88,16 @@ class CustomRCNN(GeneralizedRCNN):
         self,
         batched_inputs: Tuple[Dict[str, torch.Tensor]],
         detected_instances: Optional[List[Instances]] = None,
+        classifier: Optional[torch.Tensor] = None,
         do_postprocess: bool = True,
     ):
         assert not self.training
-        assert detected_instances is None
+        # assert detected_instances is None
 
         images = self.preprocess_image(batched_inputs)
         features = self.backbone(images.tensor)
         proposals, _ = self.proposal_generator(images, features, None)
-        results, _ = self.roi_heads(images, features, proposals)
+        results, _ = self.roi_heads(images, features, proposals, classifier_info=(classifier, None, None))
         if do_postprocess:
             assert not torch.jit.is_scripting(), \
                 "Scripting is not supported for postprocess."
@@ -106,13 +107,13 @@ class CustomRCNN(GeneralizedRCNN):
             return results
 
 
-    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]]):
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], classifier: Optional[torch.Tensor] = None):
         """
         Add ann_type
         Ignore proposal loss when training with image labels
         """
         if not self.training:
-            return self.inference(batched_inputs)
+            return self.inference(batched_inputs, classifier=classifier)
 
         images = self.preprocess_image(batched_inputs)
 
@@ -136,7 +137,7 @@ class CustomRCNN(GeneralizedRCNN):
         else:
             features = self.backbone(images.tensor)
 
-        cls_features, cls_inds, caption_features = None, None, None
+        cls_features, cls_inds, caption_features = classifier, None, None
 
         if self.with_caption and 'caption' in ann_type:
             inds = [torch.randint(len(x['captions']), (1,))[0].item() \
