@@ -9,7 +9,7 @@ def _install():
     import subprocess
     import importlib.util
     if importlib.util.find_spec('detic') is None:
-        subprocess.run([sys.executable, '-m', 'pip', 'install', os.path.dirname(__file__)], stdout=sys.stdout, stderr=sys.stderr)
+        subprocess.run([sys.executable, '-m', 'pip', 'install', os.path.dirname(__file__)])
 
 
 def detic(vocab='lvis', **kw):
