@@ -7,8 +7,11 @@ def _install():
     import os
     import sys
     import subprocess
-    import importlib.util
-    if importlib.util.find_spec('detic') is None:
+    # import importlib.util
+    # if importlib.util.find_spec('detic') is None:
+    try:
+        import detic
+    except ImportError:
         subprocess.run([sys.executable, '-m', 'pip', 'install', os.path.dirname(__file__)])
 
 
