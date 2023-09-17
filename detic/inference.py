@@ -218,8 +218,8 @@ class Detic(nn.Module):
 
     # ---------------------------------- Compute --------------------------------- #
 
-    def forward(self, im, classifier=None):
-        out = self.predictor(im, classifier=classifier)
+    def forward(self, im, boxes=None, classifier=None):
+        out = self.predictor(im, boxes=boxes, classifier=classifier)
         cid = out['instances'].pred_classes.detach().int().cpu().numpy()
         out['instances'].pred_labels = self.labels[cid]
         return out
