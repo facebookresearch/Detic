@@ -156,51 +156,6 @@ class Detic(nn.Module):
         self.set_labels(vocab, prompt=prompt)
 
     def set_labels(self, vocab, thing_classes=None, metadata_name=None, prompt=DEFAULT_PROMPT):
-        # # handle ambiguity with numpy arrays
-        # if isinstance(vocab, np.ndarray):
-        #     if vocab.ndim == 1:  # label np.array -> label list
-        #         vocab = vocab.tolist()
-        #     else:  # custom embeddings
-        #         vocab = torch.as_tensor(vocab).float()
-
-        # # custom embeddings
-        # if isinstance(vocab, torch.Tensor):
-        #     assert vocab.ndim == 2 and vocab.shape[1] == 512, "Expected vocab shape (N, 512)."
-        #     if thing_classes is None:
-        #         thing_classes = list(range(vocab.shape[0]))
-        #     classifier = vocab.T
-
-        # # text queries
-        # elif isinstance(vocab, (list, tuple)):
-        #     if thing_classes is None:
-        #         thing_classes = vocab
-            
-        #     prompt = prompt or '{}'
-        #     classifier = self.text_encoder(
-        #         [prompt.format(x) for x in vocab]
-        #     ).detach().permute(1, 0).contiguous().cpu()
-
-        # # pre-defined vocabularies
-        # elif isinstance(vocab, str):
-        #     vocab = 'lvis' if vocab is None else vocab
-        #     metadata_name = metadata_name or BUILDIN_METADATA_PATH.get(vocab) or self.cfg.DATASETS.TEST[0] or vocab
-        #     classifier = BUILDIN_CLASSIFIER.get(vocab) or self.cfg.MODEL.ZEROSHOT_WEIGHT_PATH
-        # else:
-        #     raise ValueError("Invalid vocab. Must be a list of text classes.")   
-
-        # # build metadata
-        # self.metadata_name = metadata_name or '__vocab:' + ','.join(thing_classes)
-        # self.metadata = metadata = MetadataCatalog.get(self.metadata_name)
-        # try:
-        #     if thing_classes is not None:
-        #         metadata.thing_classes = list(thing_classes)
-        #     metadata.thing_colors = [tuple(random_color(rgb=True, maximum=1)) for _ in metadata.thing_classes]
-        # except (AttributeError, AssertionError):
-        #     pass
-        
-        # self.labels = np.asarray(metadata.thing_classes)
-        # reset_cls_test(self.predictor.model, classifier, len(metadata.thing_classes))
-
         zs_weight, self.metadata, self.metadata_name = load_classifier(
             vocab, 
             thing_classes=thing_classes, 

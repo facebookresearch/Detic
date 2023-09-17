@@ -83,16 +83,32 @@ class DeticCascadeROIHeads(CascadeROIHeads):
         ret['box_predictors'] = box_predictors
         return ret
 
-    def classify_boxes(self, features, boxes, classifier=None):
+    def classify_boxes(self, features, proposals, classifier=None):
+        objectness_logits = [p.objectness_logits for p in proposals]
+        image_sizes = [x.image_size for x in proposals]
         features = [features[f] for f in self.box_in_features]
-        pool_features = self.box_pooler(features, boxes)
+        boxes = None
         scores_per_stage = []
         for k in range(self.num_cascade_stages):
-            zs = self.box_head[k](pool_features)
-            scores, cls_feats = self.box_predictor[k].class_pred(zs, (classifier, None, None))
+            if k:
+                proposals = self._create_proposals_from_boxes(boxes, image_sizes, logits=objectness_logits)
+
+            # prepare features
+            pool_boxes = [x.proposal_boxes for x in proposals]
+            box_features = self.box_pooler(features, pool_boxes)
+            box_features = self.box_head[k](box_features)
+            
+            # predict
+            predictor = self.box_predictor[k]
+            scores, cls_feats = predictor.class_pred(box_features, (classifier, None, None))
+            deltas = predictor.bbox_pred(box_features)
+            boxes = predictor.predict_boxes((scores, deltas), proposals)
+            scores = predictor.predict_probs((scores,), proposals)
             scores_per_stage.append(scores)
+
+        # get scores
         stage_scores = [torch.stack(s, dim=1) for s in zip(*scores_per_stage)]
-        scores = [s.sigmoid().mean(1).round(decimals=3) for s in stage_scores]
+        # scores = [s.mean(1).round(decimals=2) for s in stage_scores]
         return stage_scores
 
     def _forward_box(self, features, proposals, targets=None, 

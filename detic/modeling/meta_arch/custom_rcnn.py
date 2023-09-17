@@ -97,7 +97,17 @@ class CustomRCNN(GeneralizedRCNN):
         images = self.preprocess_image(batched_inputs)
         features = self.backbone(images.tensor)
         if boxes is not None:
-            scores = self.roi_heads.classify_boxes(features, boxes, classifier)
+            # scale boxes to resized image
+            proposals = []
+            for i, d in enumerate(batched_inputs):
+                b = boxes[i].clone()
+                b[:, [0, 2]] *= d['image'].shape[2] / d['width']
+                b[:, [1, 3]] *= d['image'].shape[1] / d['height']
+                inst = Instances(d['image'].shape[1:])
+                inst.proposal_boxes = Boxes(b)
+                inst.objectness_logits = torch.ones(len(b))
+                proposals.append(inst)
+            scores = self.roi_heads.classify_boxes(features, proposals, classifier)
             return scores
 
         proposals, _ = self.proposal_generator(images, features, None)
