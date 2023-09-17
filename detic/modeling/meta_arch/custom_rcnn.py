@@ -97,7 +97,7 @@ class CustomRCNN(GeneralizedRCNN):
         images = self.preprocess_image(batched_inputs)
         features = self.backbone(images.tensor)
         if boxes is not None:
-            scores = self.roi_heads.classify_boxes(images, features, boxes, classifier)
+            scores = self.roi_heads.classify_boxes(features, boxes, classifier)
             return scores
 
         proposals, _ = self.proposal_generator(images, features, None)
