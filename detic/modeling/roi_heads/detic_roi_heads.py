@@ -93,7 +93,7 @@ class DeticCascadeROIHeads(CascadeROIHeads):
             scores_per_stage.append(scores)
         stage_scores = [torch.stack(s, dim=1) for s in zip(*scores_per_stage)]
         scores = [s.sigmoid().mean(1).round(decimals=3) for s in stage_scores]
-        return scores, stage_scores
+        return stage_scores
 
     def _forward_box(self, features, proposals, targets=None, 
         ann_type='box', classifier_info=(None,None,None)):

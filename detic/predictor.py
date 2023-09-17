@@ -175,10 +175,13 @@ class DefaultPredictor(_DefaultPredictor):
         image = torch.as_tensor(image.astype("float32").transpose(2, 0, 1))
         return image, height, width
 
+    def preprocess_image(self, original_image):
+        image, height, width = self._preprocess(original_image)
+        return [{"image": image, "height": height, "width": width}]
+
     def __call__(self, original_image, *a, **kw):
         with torch.no_grad():
-            image, height, width = self._preprocess(original_image)
-            predictions = self.model([{"image": image, "height": height, "width": width}], *a, **kw)[0]
+            predictions = self.model(self.preprocess_image(original_image), *a, **kw)[0]
             return predictions
 
 
