@@ -541,7 +541,7 @@ def load_classifier(
         prompt = prompt or '{}'
         classifier = text_encoder(
             [prompt.format(x) for x in vocab]
-        ).detach().permute(1, 0).contiguous().cpu()
+        ).detach().permute(1, 0).contiguous()#.cpu()
 
     # pre-defined vocabularies
     elif isinstance(vocab, str):
