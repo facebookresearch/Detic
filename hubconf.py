@@ -10,8 +10,10 @@ def _install():
     # import importlib.util
     # if importlib.util.find_spec('detic') is None:
     try:
-        import detic
+        from detic import Detic
     except ImportError:
+        import traceback
+        traceback.print_exc()
         subprocess.run([sys.executable, '-m', 'pip', 'install', os.path.dirname(__file__)])
 
 

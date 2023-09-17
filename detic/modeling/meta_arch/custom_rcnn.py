@@ -87,7 +87,7 @@ class CustomRCNN(GeneralizedRCNN):
     def inference(
         self,
         batched_inputs: Tuple[Dict[str, torch.Tensor]],
-        detected_instances: Optional[List[Instances]] = None,
+        boxes: Optional[List[torch.Tensor]] = None,
         classifier: Optional[torch.Tensor] = None,
         do_postprocess: bool = True,
     ):
@@ -96,6 +96,10 @@ class CustomRCNN(GeneralizedRCNN):
 
         images = self.preprocess_image(batched_inputs)
         features = self.backbone(images.tensor)
+        if boxes is not None:
+            scores = self.roi_heads.classify_boxes(images, features, boxes, classifier)
+            return scores
+
         proposals, _ = self.proposal_generator(images, features, None)
         results, _ = self.roi_heads(images, features, proposals, classifier_info=(classifier, None, None))
         if do_postprocess:
@@ -107,13 +111,13 @@ class CustomRCNN(GeneralizedRCNN):
             return results
 
 
-    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], classifier: Optional[torch.Tensor] = None):
+    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], boxes: Optional[List[torch.Tensor]] = None, classifier: Optional[torch.Tensor] = None):
         """
         Add ann_type
         Ignore proposal loss when training with image labels
         """
         if not self.training:
-            return self.inference(batched_inputs, classifier=classifier)
+            return self.inference(batched_inputs, boxes=boxes, classifier=classifier)
 
         images = self.preprocess_image(batched_inputs)
 

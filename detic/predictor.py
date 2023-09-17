@@ -4,6 +4,7 @@ import bisect
 import multiprocessing as mp
 from collections import deque
 import cv2
+import numpy as np
 import torch
 
 from detectron2.data import MetadataCatalog
@@ -167,6 +168,7 @@ class VisualizationDemo(object):
 class DefaultPredictor(_DefaultPredictor):
     def _preprocess(self, original_image):
         if self.input_format == "RGB":
+            # original_image = cv2.cvtColor(np.asarray(original_image), cv2.COLOR_BGR2RGB)
             original_image = original_image[:, :, ::-1]
         height, width = original_image.shape[:2]
         image = self.aug.get_transform(original_image).apply_image(original_image)

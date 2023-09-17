@@ -226,10 +226,16 @@ class Detic(nn.Module):
 
     def encode_features(self, batched_inputs):
         images = self.predictor.model.preprocess_image(batched_inputs)
-        return self.predictor.model.backbone(images.tensor)
+        features = self.predictor.model.backbone(images.tensor)
+        return features, images
 
     def get_box_features(self, features, boxes):
         return self.predictor.model.roi_heads.get_box_features(features, boxes)
+
+    def prepose_and_detect(self, batched_inputs, images, features, classifier=None):
+        proposals, _ = self.proposal_generator(images, features, None)
+        results, _ = self.roi_heads(images, features, proposals, classifier_info=(classifier, None, None))
+        return self._postprocess(results, batched_inputs, images.image_sizes)
 
     # ------------------------------- Visualization ------------------------------ #
 
@@ -289,6 +295,18 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
         box_features = self.box_head[k](box_features)
         x, xo = self.box_predictor[k].cls_score.encode_features(box_features)
         return x
+    
+    # def classify_box(self, features, boxes, classifier):
+    #     features = [features[f] for f in self.box_in_features]
+    #     pool_features = self.box_pooler(features, pool_boxes)
+    #     scores_per_stage = []
+    #     for k in range(self.num_cascade_stages):
+    #         zs = self.box_head[k](pool_features)
+    #         scores, cls_feats = self.box_predictor[k].class_pred(zs, (classifier, None, None))
+    #         scores_per_stage.append(scores)
+    #     stage_scores = [torch.stack(s, dim=1) for s in zip(*scores_per_stage)]
+    #     scores = [s.mean(1).round(decimals=3) for s in stage_scores]
+    #     return scores
 
     def _forward_box(self, features, proposals, targets=None, ann_type='box', classifier_info=(None,None,None)):
         # get image and object metadata from proposals
@@ -372,7 +390,7 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
         return pred_instances
     
 
-        
+
     def _training_losses(self, head_outputs, targets, ann_type, classifier_info):
         losses = {}
         storage = get_event_storage()
@@ -675,27 +693,27 @@ def run(src, vocab, out_file=True, size=480, fps_down=1, **kw):
                 s.write_frame(out_frame)
                 # if input():embed()
 
-                print((outputs['instances'].stage_scores[:,:,0]*100).int())
-                # print(torch.mean(outputs['instances'].stage_scores[:,:,0], dim=1))
-                # print((outputs['instances'].scores*100).int())
-                # print((outputs['instances'].stage_boxes).int())
-                for c, cid, z in sorted(zip(detections.confidence, detections.class_id, outputs['instances'].raw_features), key=lambda x: -x[0]):
-                    if not replaced[cid]:
-                        tqdm.tqdm.write(f'Replacing {model.labels[cid]} {cid}')
-                        # classifier[:, cid] = z
-                        classifier = prepare_classifier(z[:, None])
-                        replaced[cid]=True
-                        for h in model.predictor.model.roi_heads.box_predictor:
-                            h.cls_score.norm_temperature = 1
-                            h.cls_score.dist_scale = 1/10
+                # print((outputs['instances'].stage_scores[:,:,0]*100).int())
+                # # print(torch.mean(outputs['instances'].stage_scores[:,:,0], dim=1))
+                # # print((outputs['instances'].scores*100).int())
+                # # print((outputs['instances'].stage_boxes).int())
+                # for c, cid, z in sorted(zip(detections.confidence, detections.class_id, outputs['instances'].raw_features), key=lambda x: -x[0]):
+                #     if not replaced[cid]:
+                #         tqdm.tqdm.write(f'Replacing {model.labels[cid]} {cid}')
+                #         # classifier[:, cid] = z
+                #         classifier = prepare_classifier(z[:, None])
+                #         replaced[cid]=True
+                #         for h in model.predictor.model.roi_heads.box_predictor:
+                #             h.cls_score.norm_temperature = 1
+                #             h.cls_score.dist_scale = 1/10
 
-                        outputs = model(frame, classifier)
-                        detections = vis.as_detections(outputs)
-                        s.write_frame(vis.draw(frame.copy(), detections))
-                #         embed()
-                    # else:
-                    #     mix = 0.05
-                    #     classifier[:, cid] = classifier[:, cid] * (1-mix) + z * mix
+                #         outputs = model(frame, classifier)
+                #         detections = vis.as_detections(outputs)
+                #         s.write_frame(vis.draw(frame.copy(), detections))
+                # #         embed()
+                #     # else:
+                #     #     mix = 0.05
+                #     #     classifier[:, cid] = classifier[:, cid] * (1-mix) + z * mix
     finally:
         p.print()
 
