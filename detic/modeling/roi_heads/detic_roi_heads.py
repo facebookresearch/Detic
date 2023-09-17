@@ -90,11 +90,10 @@ class DeticCascadeROIHeads(CascadeROIHeads):
         for k in range(self.num_cascade_stages):
             zs = self.box_head[k](pool_features)
             scores, cls_feats = self.box_predictor[k].class_pred(zs, (classifier, None, None))
-            scores = scores.sigmoid()
             scores_per_stage.append(scores)
         stage_scores = [torch.stack(s, dim=1) for s in zip(*scores_per_stage)]
-        scores = [s.mean(1).round(decimals=3) for s in stage_scores]
-        return scores
+        scores = [s.sigmoid().mean(1).round(decimals=3) for s in stage_scores]
+        return scores, stage_scores
 
     def _forward_box(self, features, proposals, targets=None, 
         ann_type='box', classifier_info=(None,None,None)):
