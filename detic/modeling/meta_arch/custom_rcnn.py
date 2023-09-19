@@ -89,6 +89,7 @@ class CustomRCNN(GeneralizedRCNN):
         batched_inputs: Tuple[Dict[str, torch.Tensor]],
         boxes: Optional[List[torch.Tensor]] = None,
         classifier: Optional[torch.Tensor] = None,
+        score_threshold: float = None,
         do_postprocess: bool = True,
     ):
         assert not self.training
@@ -98,20 +99,15 @@ class CustomRCNN(GeneralizedRCNN):
         features = self.backbone(images.tensor)
         if boxes is not None:
             # scale boxes to resized image
-            proposals = []
-            for i, d in enumerate(batched_inputs):
-                b = boxes[i].clone()
-                b[:, [0, 2]] *= d['image'].shape[2] / d['width']
-                b[:, [1, 3]] *= d['image'].shape[1] / d['height']
-                inst = Instances(d['image'].shape[1:])
-                inst.proposal_boxes = Boxes(b)
-                inst.objectness_logits = torch.ones(len(b))
-                proposals.append(inst)
+            proposals = self._boxes_to_proposals(batched_inputs, boxes)
             scores = self.roi_heads.classify_boxes(features, proposals, classifier)
             return scores
 
         proposals, _ = self.proposal_generator(images, features, None)
-        results, _ = self.roi_heads(images, features, proposals, classifier_info=(classifier, None, None))
+        results, _ = self.roi_heads(
+            images, features, proposals, 
+            classifier_info=(classifier, None, None), 
+            score_threshold=score_threshold)
         if do_postprocess:
             assert not torch.jit.is_scripting(), \
                 "Scripting is not supported for postprocess."
@@ -120,6 +116,41 @@ class CustomRCNN(GeneralizedRCNN):
         else:
             return results
 
+    def _boxes_to_proposals(self, batched_inputs, boxes):
+        proposals = []
+        for i, d in enumerate(batched_inputs):
+            b = boxes[i].clone()
+            b[:, [0, 2]] *= d['image'].shape[2] / d['width']
+            b[:, [1, 3]] *= d['image'].shape[1] / d['height']
+            inst = Instances(d['image'].shape[1:])
+            inst.proposal_boxes = Boxes(b)
+            inst.objectness_logits = torch.ones(len(b))
+            proposals.append(inst)
+        return proposals
+
+    def _unscale_proposal_boxes(batched_inputs, proposals):
+        new_proposals = []
+        for i, d in enumerate(batched_inputs):
+            p = proposals[i]
+            p2 = Instances(p.image_size, **p.get_fields())
+            b = proposals[i].proposal_boxes.tensor.clone()
+            b[:, [0, 2]] /= d['image'].shape[2] / d['width']
+            b[:, [1, 3]] /= d['image'].shape[1] / d['height']
+            p2.proposal_boxes = Boxes(b)
+            new_proposals.append(p2)
+        return new_proposals
+
+    def get_proposals(self, batched_inputs, boxes=None):
+        images = self.preprocess_image(batched_inputs)
+        features = self.backbone(images.tensor)
+        proposals, _ = self.proposal_generator(images, features, None)
+        scaled_proposals = _unscale_proposal_boxes(batched_inputs, proposals)
+        if boxes is not None:
+            query_proposals = self._boxes_to_proposals(batched_inputs, boxes)
+            # return query_proposals, proposals
+            iou = pairwise_iou(query_proposals[0].proposal_boxes, proposals[0].proposal_boxes)
+            return scaled_proposals, iou
+        return scaled_proposals
 
     def forward(self, batched_inputs: List[Dict[str, torch.Tensor]], boxes: Optional[List[torch.Tensor]] = None, classifier: Optional[torch.Tensor] = None):
         """

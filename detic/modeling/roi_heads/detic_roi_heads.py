@@ -86,9 +86,11 @@ class DeticCascadeROIHeads(CascadeROIHeads):
     def classify_boxes(self, features, proposals, classifier=None):
         objectness_logits = [p.objectness_logits for p in proposals]
         image_sizes = [x.image_size for x in proposals]
+        n_props = [len(p) for p in proposals]
         features = [features[f] for f in self.box_in_features]
         boxes = None
         scores_per_stage = []
+        features_per_stage = []
         for k in range(self.num_cascade_stages):
             if k:
                 proposals = self._create_proposals_from_boxes(boxes, image_sizes, logits=objectness_logits)
@@ -104,15 +106,27 @@ class DeticCascadeROIHeads(CascadeROIHeads):
             deltas = predictor.bbox_pred(box_features)
             boxes = predictor.predict_boxes((scores, deltas), proposals)
             scores = predictor.predict_probs((scores,), proposals)
+            
+            # store
             scores_per_stage.append(scores)
+            features_per_stage.append(cls_feats.split(n_props))
 
         # get scores
+        stage_features = [torch.stack(s, dim=1) for s in zip(*features_per_stage)]
         stage_scores = [torch.stack(s, dim=1) for s in zip(*scores_per_stage)]
         # scores = [s.mean(1).round(decimals=2) for s in stage_scores]
+
+        instances = []
+        for i in range(len(proposals)):
+            inst = Instances(proposals[i].image_size)
+            inst.pred_boxes = boxes[i]
+            inst.stage_scores = stage_scores[i]
+            inst.stage_features = stage_features[i]
+            instances.append(inst)
         return stage_scores
 
     def _forward_box(self, features, proposals, targets=None, 
-        ann_type='box', classifier_info=(None,None,None)):
+        ann_type='box', classifier_info=(None,None,None), score_threshold=None):
         """
         Add mult proposal scores at testing
         Add ann_type
@@ -190,7 +204,7 @@ class DeticCascadeROIHeads(CascadeROIHeads):
                 boxes,
                 scores,
                 image_sizes,
-                predictor.test_score_thresh,
+                predictor.test_score_thresh if score_threshold is None else score_threshold,
                 predictor.test_nms_thresh,
                 predictor.test_topk_per_image,
             )
@@ -198,7 +212,7 @@ class DeticCascadeROIHeads(CascadeROIHeads):
 
 
     def forward(self, images, features, proposals, targets=None,
-        ann_type='box', classifier_info=(None,None,None)):
+        ann_type='box', classifier_info=(None,None,None), score_threshold=None):
         '''
         enable debug and image labels
         classifier_info is shared across the batch
@@ -213,7 +227,7 @@ class DeticCascadeROIHeads(CascadeROIHeads):
                 proposals = self.get_top_proposals(proposals)
             
             losses = self._forward_box(features, proposals, targets, \
-                ann_type=ann_type, classifier_info=classifier_info)
+                ann_type=ann_type, classifier_info=classifier_info, score_threshold=score_threshold)
             if ann_type == 'box' and targets[0].has('gt_masks'):
                 mask_losses = self._forward_mask(features, proposals)
                 losses.update({k: v * self.mask_weight \

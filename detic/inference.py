@@ -263,7 +263,7 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
     #     scores = [s.mean(1).round(decimals=3) for s in stage_scores]
     #     return scores
 
-    def _forward_box(self, features, proposals, targets=None, ann_type='box', classifier_info=(None,None,None)):
+    def _forward_box(self, features, proposals, targets=None, ann_type='box', classifier_info=(None,None,None), score_threshold=None):
         # get image and object metadata from proposals
         k = 'scores' if len(proposals) > 0 and proposals[0].has('scores') else 'objectness_logits'
         proposal_scores = [p.get(k) for p in proposals]
@@ -331,7 +331,7 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
         # clip boxes, filter threshold, nms
         pred_instances, filt_idxs = fast_rcnn_inference(
             boxes, scores, image_sizes,
-            predictor.test_score_thresh,
+            predictor.test_score_thresh if score_threshold is None else score_threshold,
             predictor.test_nms_thresh,
             predictor.test_topk_per_image,
         )
@@ -423,7 +423,8 @@ class DeticFastRCNNOutputLayers2(DeticFastRCNNOutputLayers):
 
 
 class ZeroShotClassifier2(ZeroShotClassifier):
-    dist_scale = 1
+    cls_weight = 1
+    cls_bias = 0
     def prepare_classifier(self, classifier):
         zs_weight = classifier.permute(1, 0).contiguous() # D x C'
         if self.norm_weight:
@@ -455,10 +456,8 @@ class ZeroShotClassifier2(ZeroShotClassifier):
         x, _ = self.encode_features(x)
         zs_weight = self.get_classifier(classifier)
         T = self.norm_temperature if self.norm_weight else 1
-        y = torch.mm(T * x, zs_weight) * self.dist_scale
-        if self.use_bias:
-            y = y + self.cls_bias
-        return y, x  # ++ add x_features
+        y = torch.mm(T * x, zs_weight) * self.cls_weight + self.cls_bias
+        return y, x
 
 
 def load_classifier(
@@ -548,8 +547,8 @@ def reset_cls_test(model, cls_path, num_classes):
 
 import supervision as sv
 class Visualizer:
-    def __init__(self, model) -> None:
-        self.model = model
+    def __init__(self, labels) -> None:
+        self.labels = labels
         self.ba = sv.BoxAnnotator(text_scale=0.4, text_padding=1)
         self.ma = sv.MaskAnnotator()
 
@@ -563,7 +562,7 @@ class Visualizer:
 
     def draw(self, frame, detections):
         labels = [
-            f"{self.model.labels[class_id]} {confidence:0.2f}"
+            f"{self.labels[class_id]} {confidence:0.2f}"
             for _, _, confidence, class_id, _
             in detections
         ]
@@ -621,7 +620,7 @@ def run(src, vocab, out_file=True, size=480, fps_down=1, **kw):
     classes = model.labels
     print("classes:", classes)
 
-    vis = Visualizer(model)
+    vis = Visualizer(model.labels)
     masks_on = model.cfg.MODEL.MASK_ON
     print("using masks:", masks_on)
 
