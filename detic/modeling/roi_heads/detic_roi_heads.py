@@ -88,7 +88,7 @@ class DeticCascadeROIHeads(CascadeROIHeads):
         image_sizes = [x.image_size for x in proposals]
         n_props = [len(p) for p in proposals]
         features = [features[f] for f in self.box_in_features]
-        boxes = None
+        given_boxes = boxes = [p.proposal_boxes.tensor for p in proposals]
         scores_per_stage = []
         features_per_stage = []
         for k in range(self.num_cascade_stages):
@@ -114,16 +114,18 @@ class DeticCascadeROIHeads(CascadeROIHeads):
         # get scores
         stage_features = [torch.stack(s, dim=1) for s in zip(*features_per_stage)]
         stage_scores = [torch.stack(s, dim=1) for s in zip(*scores_per_stage)]
-        # scores = [s.mean(1).round(decimals=2) for s in stage_scores]
+        scores = [s.mean(1).round(decimals=2) for s in stage_scores]
 
         instances = []
         for i in range(len(proposals)):
             inst = Instances(proposals[i].image_size)
-            inst.pred_boxes = boxes[i]
-            inst.stage_scores = stage_scores[i]
+            inst.pred_boxes = Boxes(given_boxes[i].clone())
+            inst.all_scores = s = scores[i][:, :-1]
+            inst.scores, inst.pred_classes = torch.max(s, dim=1)
+            inst.stage_scores = stage_scores[i][:, :-1]
             inst.stage_features = stage_features[i]
             instances.append(inst)
-        return stage_scores
+        return instances
 
     def _forward_box(self, features, proposals, targets=None, 
         ann_type='box', classifier_info=(None,None,None), score_threshold=None):

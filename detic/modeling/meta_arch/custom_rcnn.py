@@ -116,7 +116,7 @@ class CustomRCNN(GeneralizedRCNN):
         else:
             return results
 
-    def _boxes_to_proposals(self, batched_inputs, boxes):
+    def boxes_to_proposals(self, batched_inputs, boxes):
         proposals = []
         for i, d in enumerate(batched_inputs):
             b = boxes[i].clone()
@@ -127,6 +127,7 @@ class CustomRCNN(GeneralizedRCNN):
             inst.objectness_logits = torch.ones(len(b))
             proposals.append(inst)
         return proposals
+    _boxes_to_proposals = boxes_to_proposals
 
     def _unscale_proposal_boxes(batched_inputs, proposals):
         new_proposals = []

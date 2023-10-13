@@ -20,6 +20,7 @@ from detectron2.modeling.roi_heads.cascade_rcnn import _ScaleGradient
 from detectron2.data import MetadataCatalog
 from detectron2.utils.file_io import PathManager
 from detectron2.utils.events import get_event_storage
+from detectron2.modeling.postprocessing import detector_postprocess
 
 # Detic libraries
 # detic_path = os.getenv('DETIC_PATH') or 'Detic'
@@ -109,6 +110,7 @@ class Detic(nn.Module):
             self, vocab=None, conf_threshold=0.5, box_conf_threshold=0.5, 
             masks=False, one_class_per_proposal=True, patch_for_embeddings=True, 
             prompt=DEFAULT_PROMPT, device=device, config=None, checkpoint=None,
+            max_size=None,
     ):
         super().__init__()
         self.cfg = cfg = get_cfg()
@@ -137,6 +139,8 @@ class Detic(nn.Module):
         cfg.MODEL.MASK_ON = masks
         cfg.MODEL.DEVICE=device # uncomment this to use cpu-only mode
         cfg.MODEL.ROI_BOX_HEAD.CAT_FREQ_PATH = os.path.join(detic_path, cfg.MODEL.ROI_BOX_HEAD.CAT_FREQ_PATH)
+        if max_size:
+            cfg.INPUT.MAX_SIZE_TEST = max_size
         # print(cfg)
         self.predictor = DefaultPredictor(cfg)
         self.cfg = cfg
@@ -173,10 +177,13 @@ class Detic(nn.Module):
 
     # ---------------------------------- Compute --------------------------------- #
 
+    def build_query(self, im):
+        return DeticQuery(self, im)
+
     def forward(self, im, boxes=None, classifier=None):
         out = self.predictor(im, boxes=boxes, classifier=classifier)
-        cid = out['instances'].pred_classes.detach().int().cpu().numpy()
-        out['instances'].pred_labels = self.labels[cid]
+        # cid = out['instances'].pred_classes.detach().int().cpu().numpy()
+        # out['instances'].pred_labels = self.labels[cid]
         return out
 
     def encode_features(self, batched_inputs):
@@ -232,12 +239,93 @@ def _jitter(self, c):
 Visualizer._jitter = _jitter
 
 
+class DeticQuery:
+    proposals = None
+    def __init__(self, model, image):
+        self.wrapper = model
+        self.model = model.predictor.model
+        self.image = image
+        self.batched_inputs = self.wrapper.predictor.preprocess_image(image)
+        self.images = self.model.preprocess_image(self.batched_inputs)
+        self.features = self.model.backbone(self.images.tensor)
+
+    def get_proposals(self):
+        if self.proposals is None:
+            self.proposals, _ = self.model.proposal_generator(
+                self.images, self.features, None)
+        return self.proposals
+
+    def detect(self, classifier=None, conf_threshold=None, labels=None):
+        results, _ = self.model.roi_heads(
+            self.images, self.features, self.get_proposals(), 
+            classifier_info=(classifier, None, None), 
+            score_threshold=conf_threshold)
+        return self._postprocess(results, labels)
+
+    def predict(self, boxes, classifier=None, labels=None):
+        proposals = self.model.boxes_to_proposals(self.batched_inputs, [boxes])
+        results = self.model.roi_heads.classify_boxes(self.features, proposals, classifier)
+        return self._postprocess(results, labels)
+
+    def _postprocess(self, instances, labels=None):
+        # results = self.model._postprocess(
+        #     results, self.batched_inputs, self.images.image_sizes)
+        results = []
+        for results_per_image, input_per_image, image_size in zip(
+            instances, self.batched_inputs, self.images.image_sizes
+        ):
+            height = input_per_image.get("height", image_size[0])
+            width = input_per_image.get("width", image_size[1])
+            r = detector_postprocess(results_per_image, height, width)
+            results.append({"instances": r})
+        results = results[0]
+        if labels is not None:
+            results['instances'].pred_labels = labels[results['instances'].pred_classes.int().cpu().numpy()]
+            if results['instances'].has('topk_classes'):
+                labelsx = np.concatenate([labels, np.array([''])])
+                results['instances'].topk_labels = labelsx[results['instances'].topk_classes.int().cpu().numpy()]
+        return results
+
+    # def inference(
+    #     self,
+    #     batched_inputs: Tuple[Dict[str, torch.Tensor]],
+    #     boxes: Optional[List[torch.Tensor]] = None,
+    #     classifier: Optional[torch.Tensor] = None,
+    #     score_threshold: float = None,
+    #     do_postprocess: bool = True,
+    # ):
+    #     assert not self.training
+    #     # assert detected_instances is None
+
+    #     images = self.preprocess_image(batched_inputs)
+    #     features = self.backbone(images.tensor)
+    #     if boxes is not None:
+    #         # scale boxes to resized image
+    #         proposals = self._boxes_to_proposals(batched_inputs, boxes)
+    #         scores = self.roi_heads.classify_boxes(features, proposals, classifier)
+    #         return scores
+
+    #     proposals, _ = self.proposal_generator(images, features, None)
+    #     results, _ = self.roi_heads(
+    #         images, features, proposals, 
+    #         classifier_info=(classifier, None, None), 
+    #         score_threshold=score_threshold)
+    #     if do_postprocess:
+    #         assert not torch.jit.is_scripting(), \
+    #             "Scripting is not supported for postprocess."
+    #         return CustomRCNN._postprocess(
+    #             results, batched_inputs, images.image_sizes)
+    #     else:
+    #         return results
+
+
 from torch.nn import functional as F
 # from detic.modeling.meta_arch.custom_rcnn import CustomRCNN
 from detic.modeling.roi_heads.detic_roi_heads import DeticCascadeROIHeads
 from detic.modeling.roi_heads.detic_fast_rcnn import DeticFastRCNNOutputLayers
 from detic.modeling.roi_heads.zero_shot_classifier import ZeroShotClassifier
-from detectron2.modeling.roi_heads.fast_rcnn import fast_rcnn_inference
+# from detectron2.modeling.roi_heads.fast_rcnn import fast_rcnn_inference
+from detic.modeling.roi_heads.fast_rcnn_inference import fast_rcnn_inference
 
 class DeticCascadeROIHeads2(DeticCascadeROIHeads):
     # xx How to get box features given a box
@@ -293,9 +381,9 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
             box_features = _ScaleGradient.apply(box_features, 1.0 / self.num_cascade_stages)
             # several CNN>norm>relu layers
             box_features = self.box_head[k](box_features)
-            # store 1024 features on the proposals
-            for feat, p in zip(box_features.split([len(p) for p in proposals], dim=0), proposals):
-                p.feat = feat
+            # # store 1024 features on the proposals
+            # for feat, p in zip(box_features.split([len(p) for p in proposals], dim=0), proposals):
+            #     p.feat = feat
 
             # predict classes and regress boxes
             predictor = self.box_predictor[k]
@@ -324,24 +412,38 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
         scores = [s.mean(1).round(decimals=2) for s in stage_scores]
         # if self.mult_proposal_score:
         #     scores = [(s ** 0.8) * (ps[:, None] ** 0.2) for s, ps in zip(scores, proposal_scores)]
-        if self.one_class_per_proposal:
-            scores = [s * (s == s[:, :-1].max(dim=1)[0][:, None]).float() for s in scores]
+        # if self.one_class_per_proposal:
+        #     scores = [s * (s == s[:, :-1].max(dim=1)[0][:, None]).float() for s in scores]
+        # if int(self.one_class_per_proposal) == 1:
+        #     scores = [s * (s == s[:, :-1].max(dim=1)[0][:, None]).float() for s in scores]
+        # elif int(self.one_class_per_proposal) > 1:
+        #     for i, s in enumerate(scores):
+        #         ss = torch.zeros_like(s)
+        #         idxs = torch.topk(s, k=self.one_class_per_proposal).indices
+        #         ss[idxs] = s[idxs]
+        #         scores[i] = ss
 
         # down-select proposals
         # clip boxes, filter threshold, nms
         pred_instances, filt_idxs = fast_rcnn_inference(
             boxes, scores, image_sizes,
-            predictor.test_score_thresh if score_threshold is None else score_threshold,
-            predictor.test_nms_thresh,
-            predictor.test_topk_per_image,
+            score_thresh=predictor.test_score_thresh if score_threshold is None else score_threshold,
+            nms_thresh=predictor.test_nms_thresh,
+            topk_per_image=predictor.test_topk_per_image,
+            topk_per_box=self.one_class_per_proposal,
         )
+
         # ++ add clip features and box scores to instances [N boxes x 512]
-        pred_instances[0].stage_scores = stage_scores[0][filt_idxs]
-        pred_instances[0].raw_features = box_features[filt_idxs]
-        # pred_instances[0].raw_features = feats_per_image[0][filt_idxs]
-        pred_instances[0].clip_features = cls_feats[filt_idxs]
-        if self.mult_proposal_score:
-            pred_instances[0].box_scores = proposal_scores[0][filt_idxs]
+        box_features = box_features.split([len(p) for p in proposals], dim=0)
+        cls_feats = cls_feats.split([len(p) for p in proposals], dim=0)
+        for i in range(len(pred_instances)):
+            pred_instances[i].pred_scores = scores[i][filt_idxs][:, :-1]
+            pred_instances[i].stage_scores = stage_scores[i][filt_idxs]
+            pred_instances[i].raw_features = box_features[i][filt_idxs]
+            # pred_instances[i].raw_features = feats_per_image[i][filt_idxs]
+            pred_instances[i].clip_features = cls_feats[i][filt_idxs]
+            if self.mult_proposal_score:
+                pred_instances[i].box_scores = proposal_scores[i][filt_idxs]
         return pred_instances
     
 
@@ -460,6 +562,99 @@ class ZeroShotClassifier2(ZeroShotClassifier):
         return y, x
 
 
+
+# def _asymmetric_nms(boxes, scores, iou_threshold):
+#     boxes = np.array(boxes)
+#     scores = np.array(scores)
+
+#     # Sort boxes by their confidence scores in descending order
+#     indices = np.argsort(scores)[::-1]
+#     boxes = boxes[sorted_indices]
+#     scores = scores[sorted_indices]
+
+#     selected_indices = []
+#     while len(boxes) > 0:
+#         # Pick the box with the highest confidence score
+#         b = boxes[0]
+#         selected_indices.append(indices[0])
+
+#         # Calculate IoU between the picked box and the remaining boxes
+#         intersection_area = (
+#             np.maximum(0, np.minimum(b[2], boxes[1:, 2]) - np.maximum(b[0], boxes[1:, 0])) * 
+#             np.maximum(0, np.minimum(b[3], boxes[1:, 3]) - np.maximum(b[1], boxes[1:, 1]))
+#         )
+#         smaller_box_area = np.minimum(
+#             (b[2] - b[0]) * (b[3] - b[1])
+#             (boxes[1:, 2] - boxes[1:, 0]) * (boxes[1:, 3] - boxes[1:, 1])
+#         )
+#         iou = intersection_area / (smaller_box_area + 1e-7)
+
+#         # Filter out boxes with IoU above the threshold
+#         filtered_indices = np.where(iou <= iou_threshold)[0]
+#         indices = indices[filtered_indices + 1]
+#         boxes = boxes[filtered_indices + 1]
+#         scores = scores[filtered_indices + 1]
+
+#     return selected_indices
+
+
+def asymmetric_nms_instances(instances):
+    new_instances = []
+    new_indices = []
+    for inst in instances:
+        result = Instances(image_shape)
+        result.pred_boxes = Boxes(boxes)
+        indices, overlap_indices = asymmetric_nms(boxes, scores, iou_threshold)
+    return new_instances, indices
+
+
+def asymmetric_nms(boxes, scores, iou_threshold=0.9):
+    boxes = np.array(boxes)
+    scores = np.array(scores)
+    area = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+
+    # Sort boxes by their confidence scores in descending order
+    # indices = np.argsort(area)[::-1]
+    indices = np.argsort(scores)[::-1]
+    boxes = boxes[indices]
+    scores = scores[indices]
+
+    selected_indices = []
+    overlap_indices = []
+    while len(boxes) > 0:
+        # Pick the box with the highest confidence score
+        b = boxes[0]
+        selected_indices.append(indices[0])
+
+        # Calculate IoU between the picked box and the remaining boxes
+        intersection_area = (
+            np.maximum(0, np.minimum(b[2], boxes[1:, 2]) - np.maximum(b[0], boxes[1:, 0])) * 
+            np.maximum(0, np.minimum(b[3], boxes[1:, 3]) - np.maximum(b[1], boxes[1:, 1]))
+        )
+        # smaller_box_area = np.minimum(
+        #     (b[2] - b[0]) * (b[3] - b[1]),
+        #     (boxes[1:, 2] - boxes[1:, 0]) * (boxes[1:, 3] - boxes[1:, 1])
+        # )
+        smaller_box_area = np.minimum(area[0], area[1:])
+        iou = intersection_area / (smaller_box_area + 1e-7)
+
+        # Filter out boxes with IoU above the threshold
+        overlap_indices.append(np.where(iou > iou_threshold)[0])
+        filtered_indices = np.where(iou <= iou_threshold)[0]
+        indices = indices[filtered_indices + 1]
+        boxes = boxes[filtered_indices + 1]
+        scores = scores[filtered_indices + 1]
+        area = area[filtered_indices + 1]
+
+    return selected_indices, overlap_indices
+
+
+
+
+
+
+
+
 def load_classifier(
         vocab, thing_classes=None, 
         prompt='a {}', 
@@ -468,6 +663,7 @@ def load_classifier(
         device=device, 
         norm_weight=True,
         z_dim=512,
+        prepare=True,
 ):
     # default vocab
     if vocab is None:
@@ -519,7 +715,9 @@ def load_classifier(
     except (AttributeError, AssertionError):
         pass
 
-    return prepare_classifier(classifier, device, norm_weight), metadata, metadata_name
+    if prepare:
+        classifier = prepare_classifier(classifier, device, norm_weight)
+    return classifier, metadata, metadata_name
 
 def prepare_classifier(zs_weight, device=None, norm_weight=True):
     if isinstance(zs_weight, str):
@@ -562,11 +760,11 @@ class Visualizer:
 
     def draw(self, frame, detections):
         labels = [
-            f"{self.labels[class_id]} {confidence:0.2f}"
+            f"{self.labels[class_id].split(' ')[0]} {confidence:0.2f}"
             for _, _, confidence, class_id, _
             in detections
         ]
-        # frame = self.ma.annotate(scene=frame, detections=detections)
+        frame = self.ma.annotate(scene=frame, detections=detections)
         frame = self.ba.annotate(scene=frame, detections=detections, labels=labels)
         return frame
 
@@ -636,13 +834,14 @@ def run(src, vocab, out_file=True, size=480, fps_down=1, **kw):
         with sv.VideoSink(out_file, video_info=video_info) as s, p:
             pbar = tqdm.tqdm(enumerate(sv.get_video_frames_generator(src)), total=video_info.total_frames)
             for i, frame in pbar:
+                if i % fps_down: continue
                 # if i > 100: break
                 frame = cv2.resize(frame, WH)
-                outputs = model(frame, classifier)
+                outputs = model(frame, classifier=classifier)
                 # bbox_unique, iv = model.group_proposals(bbox)
                 detections = vis.as_detections(outputs)
                 
-                pbar.set_description(f'{len(detections)}' + ', '.join(set(classes[i] for i in detections.class_id)) or 'nothing')
+                pbar.set_description(f'{len(detections)}' + ', '.join(set(classes[i][:10] for i in detections.class_id)) or 'nothing')
                 out_frame = vis.draw(frame.copy(), detections)
                 s.write_frame(out_frame)
                 # if input():embed()
@@ -679,6 +878,7 @@ def get_video_info(src, size, fps_down=1, nrows=1, ncols=1):
     video_info = sv.VideoInfo.from_video_path(video_path=src)
     # make the video size a multiple of 16 (because otherwise it won't generate masks of the right size)
     aspect = video_info.width / video_info.height
+    size = size or video_info.height
     video_info.width = int(aspect*size)//16*16
     video_info.height = int(size)//16*16
     WH = video_info.width, video_info.height
