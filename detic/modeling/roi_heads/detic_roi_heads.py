@@ -242,7 +242,7 @@ class DeticCascadeROIHeads(CascadeROIHeads):
             return proposals, losses
         else:
             pred_instances = self._forward_box(
-                features, proposals, classifier_info=classifier_info)
+                features, proposals, classifier_info=classifier_info, score_threshold=score_threshold)
             pred_instances = self.forward_with_given_boxes(features, pred_instances)
             return pred_instances, {}
 
