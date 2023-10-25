@@ -3,6 +3,7 @@
 import logging
 from typing import Callable, Dict, List, Optional, Tuple, Union
 import torch
+import numpy as np
 from detectron2.layers import ShapeSpec, batched_nms, cat, cross_entropy, nonzero_tuple
 from detectron2.structures import Boxes, Instances
 
@@ -33,6 +34,9 @@ def fast_rcnn_inference_single_image(
     nms_thresh: float,
     topk_per_image: int,
     topk_per_box: int,
+    class_id_map: torch.Tensor=None,
+    class_priority: torch.Tensor=None,
+    asymmetric=False,
 ):
     filter_inds = torch.arange(len(boxes), device=boxes.device)
 
@@ -62,12 +66,17 @@ def fast_rcnn_inference_single_image(
     topk_scores = topk_scores[filter_thresh]
     topk_class_ids = topk_class_ids[filter_thresh]
     filter_inds = filter_inds[filter_thresh]
+    if class_id_map is not None:
+        topk_class_ids = class_id_map[topk_class_ids]
 
     # from IPython import embed
     # if input(): embed()
 
     # 2. Apply NMS for each class independently.
-    keep = batched_nms(boxes, top_scores, top_class_ids, nms_thresh)
+    if asymmetric:
+        keep, _ = asymmetric_nms(_nms_coord_trick(boxes, topk_class_ids), top_scores, class_priority, iou_threshold=nms_thresh)
+    else:
+        keep = batched_nms(boxes, top_scores, top_class_ids, nms_thresh)
     if topk_per_image > 0:
         keep = keep[:topk_per_image]
 
@@ -83,55 +92,53 @@ def fast_rcnn_inference_single_image(
     return result, filter_inds[keep]
 
 
+def _nms_coord_trick(boxes, idxs):
+    if boxes.numel() == 0:
+        return torch.empty((0,), dtype=torch.int64, device=boxes.device)
+    offsets = idxs.to(boxes) * (boxes.max() + torch.tensor(1).to(boxes))
+    return boxes + offsets[:, None]
 
-# def fast_rcnn_inference_single_image(
-#     boxes,
-#     scores,
-#     image_shape: Tuple[int, int],
-#     score_thresh: float,
-#     nms_thresh: float,
-#     topk_per_image: int,
-# ):
-#     valid_mask = torch.isfinite(boxes).all(dim=1) & torch.isfinite(scores).all(dim=1)
-#     if not valid_mask.all():
-#         boxes = boxes[valid_mask]
-#         scores = scores[valid_mask]
-#     print(scores.shape, boxes.shape, valid_mask.shape)
 
-#     scores = scores[:, :-1] # R x (C+1) => R x C
-#     # Convert to Boxes to use the `clip` function ...
-#     num_bbox_reg_classes = boxes.shape[1] // 4
-#     boxes = Boxes(boxes.reshape(-1, 4))
-#     boxes.clip(image_shape)
-#     boxes = boxes.tensor.view(-1, num_bbox_reg_classes, 4)  # R x C x 4
+def asymmetric_nms(boxes, scores, priority=None, iou_threshold=0.99):
+    # Sort boxes by their confidence scores in descending order
+    area = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+    if priority is not None:
+        indices = torch.as_tensor(np.lexsort((
+            -area.cpu().numpy(),
+            -priority.cpu().numpy(), 
+        )), device=area.device)
+    else:
+        indices = torch.argsort(area, descending=True)
+    boxes = boxes[indices]
+    scores = scores[indices]
 
-#     # 1. Filter results based on detection scores. It can make NMS more efficient
-#     #    by filtering out low-confidence detections.
-#     filter_mask = scores > score_thresh  # R x K
-#     # R' x 2. First column contains indices of the R predictions;
-#     # Second column contains indices of classes.
-#     filter_inds = filter_mask.nonzero()
-#     print(filter_mask.shape, filter_inds.shape)
-#     if num_bbox_reg_classes == 1:
-#         boxes = boxes[filter_inds[:, 0], 0]
-#     else:
-#         boxes = boxes[filter_mask]
-#     scores = scores[filter_mask]
-#     print(scores.shape, boxes.shape)
-#     from IPython import embed
-#     if input(): embed()
+    selected_indices = []
+    overlap_indices = []
+    while len(boxes) > 0:
+        # Pick the box with the highest confidence score
+        b = boxes[0]
+        selected_indices.append(indices[0])
 
-#     # 2. Apply NMS for each class independently.
-#     keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
-#     if topk_per_image >= 0:
-#         keep = keep[:topk_per_image]
-#     boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]
+        # Calculate IoU between the picked box and the remaining boxes
+        zero = torch.tensor([0], device=boxes.device)
+        intersection_area = (
+            torch.maximum(zero, torch.minimum(b[2], boxes[1:, 2]) - torch.maximum(b[0], boxes[1:, 0])) * 
+            torch.maximum(zero, torch.minimum(b[3], boxes[1:, 3]) - torch.maximum(b[1], boxes[1:, 1]))
+        )
+        smaller_box_area = torch.minimum(area[0], area[1:])
+        iou = intersection_area / (smaller_box_area + 1e-7)
 
-#     # TODO: group boxes back, then create scores + topk classes matrix
-#     result = Instances(image_shape)
-#     result.pred_boxes = Boxes(boxes)
-#     result.scores = scores
-#     result.pred_classes = filter_inds[:, 1]
-#     # result.pred_scores = ...
-#     # result.topk_pred_classes = filter_inds[:, 1]
-#     return result, filter_inds[:, 0]
+        # Filter out boxes with IoU above the threshold
+        overlap_indices.append(indices[torch.where(iou > iou_threshold)[0] + 1])
+        filtered_indices = torch.where(iou <= iou_threshold)[0]
+        indices = indices[filtered_indices + 1]
+        boxes = boxes[filtered_indices + 1]
+        scores = scores[filtered_indices + 1]
+        area = area[filtered_indices + 1]
+
+    selected_indices = (
+        torch.stack(selected_indices) if selected_indices else 
+        torch.zeros([0], dtype=torch.int32, device=boxes.device))
+    # print(nn, overlap_indices)
+    # if nn>1 and input():embed()
+    return selected_indices, overlap_indices
