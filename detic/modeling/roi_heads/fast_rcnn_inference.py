@@ -37,6 +37,7 @@ def fast_rcnn_inference_single_image(
     class_id_map: torch.Tensor=None,
     class_priority: torch.Tensor=None,
     asymmetric=False,
+    filter_cls_token=False,
 ):
     filter_inds = torch.arange(len(boxes), device=boxes.device)
 
@@ -53,7 +54,9 @@ def fast_rcnn_inference_single_image(
     boxes = boxes.tensor
 
     # filter scores below the "cls" token
-    scores[scores <= scores[:, -1:]] = 0
+    scores = scores[:, :-1]
+    # if filter_cls_token:
+    #     scores[scores <= scores[:, -1:]] = 0
     # get the max score
     topk_scores, topk_class_ids = torch.topk(scores, k=int(topk_per_box or 1))
     top_scores = topk_scores[:, 0]
