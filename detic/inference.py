@@ -59,9 +59,10 @@ device = (
 
 DEFAULT_PROMPT = 'a {}'
 
-CHECKPOINT = 'https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth'
-CONFIG = "configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml"
-
+# CHECKPOINT = 'https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth'
+# CONFIG = "configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml"
+# CHECKPOINT = 'https://dl.fbaipublicfiles.com/detic/Detic_LI_CLIP_SwinB_896b32_4x_ft4x_max-size.pth'
+# CONFIG = "configs/Detic_LI_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml"
 # from .data.datasets import egohos
 # CHECKPOINT = 'output/Detic/Detic_EGOHOS_CLIP_SwinB_896b32_4x_ft4x_max-size/model_0009999.pth'
 # CONFIG = "configs/Detic_EGOHOS_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml"
@@ -70,6 +71,10 @@ VERSIONS = {
     None: (
         'https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth',
         'configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml'
+    ),
+    'LI': (
+        'https://dl.fbaipublicfiles.com/detic/Detic_LI_CLIP_SwinB_896b32_4x_ft4x_max-size.pth',
+        'configs/Detic_LI_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml'
     ),
     'egohos': (
         'output/Detic/Detic_EGOHOS_CLIP_SwinB_896b32_4x_ft4x_max-size/model_0133999.pth',
@@ -122,13 +127,17 @@ class Detic(nn.Module):
             vocab = [x for x in vocab if x and not x.startswith(';')]
 
         # get latest checkpoint for that config (if it exists)
-        if config and not checkpoint:
-            checkpoint = (glob.glob(os.path.join('output/Detic', os.path.splitext(os.path.basename(config))[0], 'model_*.pth')) or [None])[0]
+        if config in VERSIONS:
+            chk, config = VERSIONS[config]
+            checkpoint = checkpoint or chk
+        if config:
+            checkpoint = checkpoint or (glob.glob(os.path.join('output/Detic', os.path.splitext(os.path.basename(config))[0], 'model_*.pth')) or [None])[0]
 
         # get default config/checkpoint for that vocab
-        _ch, _cf = (VERSIONS.get(vocab) if isinstance(vocab, str) else None) or VERSIONS[None]
-        config = config or _cf
-        checkpoint = checkpoint or _ch
+        # _ch, _cf = (VERSIONS.get(vocab) if isinstance(vocab, str) else None) or VERSIONS[None]
+        # _ch, _cf = VERSIONS[config]
+        # config = config or _cf
+        # checkpoint = checkpoint or _ch
         print(checkpoint)
 
         cfg.merge_from_file(os.path.join(detic_path, config))
@@ -255,11 +264,13 @@ class DeticQuery:
                 self.images, self.features, None)
         return self.proposals
 
-    def detect(self, classifier=None, conf_threshold=None, labels=None):
-        results, _ = self.model.roi_heads(
+    def detect(self, classifier=None, conf_threshold=None, labels=None, roi_heads=None, **kw):
+        if roi_heads is None:
+            roi_heads = self.model.roi_heads
+        results, _ = roi_heads(
             self.images, self.features, self.get_proposals(), 
             classifier_info=(classifier, None, None), 
-            score_threshold=conf_threshold)
+            score_threshold=conf_threshold, **kw)
         return self._postprocess(results, labels)
 
     def predict(self, boxes, classifier=None, labels=None):
@@ -351,7 +362,8 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
     #     scores = [s.mean(1).round(decimals=3) for s in stage_scores]
     #     return scores
 
-    def _forward_box(self, features, proposals, targets=None, ann_type='box', classifier_info=(None,None,None), score_threshold=None):
+    use_asymmetric_nms = False
+    def _forward_box(self, features, proposals, targets=None, ann_type='box', classifier_info=(None,None,None), score_threshold=None, asymmetric_nms=None):
         # get image and object metadata from proposals
         k = 'scores' if len(proposals) > 0 and proposals[0].has('scores') else 'objectness_logits'
         proposal_scores = [p.get(k) for p in proposals]
@@ -431,6 +443,7 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
             nms_thresh=predictor.test_nms_thresh,
             topk_per_image=predictor.test_topk_per_image,
             topk_per_box=self.one_class_per_proposal,
+            asymmetric=self.use_asymmetric_nms if asymmetric_nms is None else asymmetric_nms
         )
 
         # ++ add clip features and box scores to instances [N boxes x 512]
@@ -475,30 +488,6 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
 
 
 
-class Query:
-    def __init__(self, proposals):
-        self.proposals = proposals
-
-        k = 'scores' if len(proposals) > 0 and proposals[0].has('scores') else 'objectness_logits'
-        self.proposal_scores = [p.get(k) for p in proposals]
-        self.objectness_logits = [p.objectness_logits for p in proposals]
-        self.image_sizes = [x.image_size for x in proposals]
-
-    def encode_box_features(self):
-        # Run stage - get features per box
-        pool_boxes = [x.proposal_boxes for x in self.proposals]
-        # pools features using boxes
-        box_features = self.box_pooler(features, pool_boxes)
-        box_features = _ScaleGradient.apply(box_features, 1.0 / self.num_cascade_stages)
-        # several CNN>norm>relu layers
-        box_features = self.box_head[k](box_features)
-
-    def cascade_boxes(self):
-        pass
-
-
-
-
 class DeticFastRCNNOutputLayers2(DeticFastRCNNOutputLayers):
     def class_pred(self, x, classifier_info=(None,None,None)):
         if x.dim() > 2:
@@ -528,7 +517,10 @@ class ZeroShotClassifier2(ZeroShotClassifier):
     cls_weight = 1
     cls_bias = 0
     def prepare_classifier(self, classifier):
-        zs_weight = classifier.permute(1, 0).contiguous() # D x C'
+        # classifier = classifier.permute(1, 0)
+        if self.linear.weight.shape[0] != classifier.shape[0] and self.linear.weight.shape[1] == classifier.shape[0]:
+            classifier = classifier.permute(1, 0)
+        zs_weight = classifier.contiguous() # D x C'
         if self.norm_weight:
             zs_weight = F.normalize(zs_weight, p=2, dim=0)
         return zs_weight
@@ -536,11 +528,13 @@ class ZeroShotClassifier2(ZeroShotClassifier):
     def get_classifier(self, classifier=None):
         if classifier is None:
             classifier = self.zs_weight
-        # else:
-        #     classifier = self.prepare_classifier(classifier)
-        if self.linear.weight.shape[0] != classifier.shape[0] and self.linear.weight.shape[1] == classifier.shape[0]:
-            classifier = self.linear(classifier.permute(1, 0)).permute(1, 0)
-        assert self.linear.weight.shape[0] == classifier.shape[0], f'{self.linear.weight.shape} != {classifier.shape}'
+        else:
+            classifier = self.prepare_classifier(classifier)
+        w = self.linear.weight
+        # if w.shape[0] != classifier.shape[0] and w.shape[1] == classifier.shape[0]:
+        #     classifier = self.linear(classifier.permute(1, 0)).permute(1, 0)
+        assert w.shape[0] == classifier.shape[0], f'{w.shape} != {classifier.shape}'
+        
         return classifier  # D x C'
     
     def encode_features(self, x):
@@ -680,7 +674,9 @@ def load_classifier(
     if isinstance(vocab, torch.Tensor):
         assert vocab.ndim == 2 and vocab.shape[1] == z_dim, f"Expected vocab shape (N, {z_dim})."
         if thing_classes is None:
-            thing_classes = list(range(vocab.shape[0]))
+            thing_classes = [f'{i}' for i in range(vocab.shape[0])]
+            if metadata_name is None:
+                metadata_name = f'custom{id(vocab)}'
         classifier = vocab.permute(1, 0)
 
     # text queries
@@ -708,6 +704,7 @@ def load_classifier(
     # build metadata
     metadata_name = metadata_name or '__vocab:' + ','.join(thing_classes)
     metadata = MetadataCatalog.get(metadata_name)
+    print(metadata_name, metadata)
     try:
         if thing_classes is not None:
             metadata.thing_classes = list(thing_classes)
@@ -758,18 +755,36 @@ class Visualizer:
             class_id=outputs["instances"].pred_classes.cpu().numpy().astype(int),
         )
 
-    def draw(self, frame, detections):
-        labels = [
-            f"{self.labels[class_id].split(' ')[0]} {confidence:0.2f}"
-            for _, _, confidence, class_id, _
-            in detections
-        ]
+    def draw(self, frame, detections, labels):
+        # labels = [
+        #     f"{self.labels[class_id].split(' ')[0]} {confidence:0.2f}"
+        #     for _, _, confidence, class_id, _
+        #     in detections
+        # ]
         frame = self.ma.annotate(scene=frame, detections=detections)
         frame = self.ba.annotate(scene=frame, detections=detections, labels=labels)
         return frame
 
 
-def run(src, vocab, out_file=True, size=480, fps_down=1, **kw):
+def as_detections(outputs, labels):
+    detections = sv.Detections(
+        xyxy=outputs["instances"].pred_boxes.tensor.cpu().numpy(),
+        mask=outputs["instances"].pred_masks.cpu().numpy() if hasattr(outputs["instances"], 'pred_masks') else None,
+        confidence=outputs["instances"].scores.cpu().numpy(),
+        class_id=outputs["instances"].pred_classes.cpu().numpy().astype(int),
+    )
+    labels = [
+        f"{labels[class_id].split(' ')[0]} {confidence:0.2f}"
+        for _, _, confidence, class_id, _
+        in detections
+    ]
+    return detections, labels
+
+
+import ipdb
+@ipdb.iex
+@torch.no_grad()
+def run(src, vocab, out_file=True, size=480, fps_down=1, roi_head=None, roi_conf_threshold=0.5, model=None, **kw):
     """Run multi-target tracker on a particular sequence.
     """
     import tqdm
@@ -791,7 +806,12 @@ def run(src, vocab, out_file=True, size=480, fps_down=1, **kw):
 
     kw.setdefault('masks', True)
     # kw.setdefault('conf_threshold', 0.6)
-    model = Detic(['cat'], **kw).to(device)
+    model = Detic(config='LI', **kw).to(device) if model is None else model
+
+    if roi_head is not None and isinstance(roi_head, str):
+        # roi_head=model2 = Detic(checkpoint=roi_head, **kw).to(device)
+        # model2.set_vocab(['tortilla', 'jar', 'plate', 'cutting_board'])
+        roi_head = torch.load(roi_head)
 
     if isinstance(vocab, str) and os.path.isfile(vocab):
         d = np.load(vocab)
@@ -804,7 +824,7 @@ def run(src, vocab, out_file=True, size=480, fps_down=1, **kw):
     else:
         model.set_vocab(vocab)
 
-    classifier = model.predictor.model.roi_heads.box_predictor[0].cls_score.zs_weight
+    # classifier = model.predictor.model.roi_heads.box_predictor[0].cls_score.zs_weight
 
     # for h in model.predictor.model.roi_heads.box_predictor:
     #     h.cls_score.norm_temperature = 10
@@ -815,7 +835,7 @@ def run(src, vocab, out_file=True, size=480, fps_down=1, **kw):
     assert out_file
     print("Writing to:", os.path.abspath(out_file))
 
-    classes = model.labels
+    classes = model.labels = model.labels.astype(str)
     print("classes:", classes)
 
     vis = Visualizer(model.labels)
@@ -830,19 +850,32 @@ def run(src, vocab, out_file=True, size=480, fps_down=1, **kw):
     # video_info = sv.VideoInfo.from_video_path(src)
     video_info, WH = get_video_info(src, size, fps_down)
     try:
-        replaced = [False]*len(classifier)
+        # replaced = [False]*len(classifier)
         with sv.VideoSink(out_file, video_info=video_info) as s, p:
             pbar = tqdm.tqdm(enumerate(sv.get_video_frames_generator(src)), total=video_info.total_frames)
             for i, frame in pbar:
+                if i < 1070: continue
                 if i % fps_down: continue
                 # if i > 100: break
                 frame = cv2.resize(frame, WH)
-                outputs = model(frame, classifier=classifier)
+                query = model.build_query(frame)
+
+                outputs = query.detect()
+                # outputs = model(frame, classifier=classifier)
                 # bbox_unique, iv = model.group_proposals(bbox)
-                detections = vis.as_detections(outputs)
-                
+                detections, labels = as_detections(outputs, model.labels)
                 pbar.set_description(f'{len(detections)}' + ', '.join(set(classes[i][:10] for i in detections.class_id)) or 'nothing')
-                out_frame = vis.draw(frame.copy(), detections)
+                out_frame = vis.draw(frame.copy(), detections, labels)
+
+                if roi_head is not None:
+                    # query = model2.build_query(frame)
+                    # outputs = query.detect(conf_threshold=roi_conf_threshold)#, roi_heads=roi_head
+                    outputs = query.detect(conf_threshold=roi_conf_threshold, roi_heads=roi_head, asymmetric_nms=True)
+                    detections, labels = as_detections(outputs, roi_head.labels)
+                    out_frame = vis.draw(out_frame, detections, labels)
+                    pbar.set_description(f'{len(detections)}' + ', '.join(set(
+                        roi_head.labels[i][:10] for i in detections.class_id)) or 'nothing')
+
                 s.write_frame(out_frame)
                 # if input():embed()
 

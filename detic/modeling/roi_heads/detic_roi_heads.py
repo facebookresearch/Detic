@@ -214,7 +214,7 @@ class DeticCascadeROIHeads(CascadeROIHeads):
 
 
     def forward(self, images, features, proposals, targets=None,
-        ann_type='box', classifier_info=(None,None,None), score_threshold=None):
+        ann_type='box', **kw):
         '''
         enable debug and image labels
         classifier_info is shared across the batch
@@ -228,8 +228,7 @@ class DeticCascadeROIHeads(CascadeROIHeads):
             else:
                 proposals = self.get_top_proposals(proposals)
             
-            losses = self._forward_box(features, proposals, targets, \
-                ann_type=ann_type, classifier_info=classifier_info, score_threshold=score_threshold)
+            losses = self._forward_box(features, proposals, targets, ann_type=ann_type, **kw)
             if ann_type == 'box' and targets[0].has('gt_masks'):
                 mask_losses = self._forward_mask(features, proposals)
                 losses.update({k: v * self.mask_weight \
@@ -241,8 +240,7 @@ class DeticCascadeROIHeads(CascadeROIHeads):
                     device=proposals[0].objectness_logits.device))
             return proposals, losses
         else:
-            pred_instances = self._forward_box(
-                features, proposals, classifier_info=classifier_info, score_threshold=score_threshold)
+            pred_instances = self._forward_box(features, proposals, **kw)
             pred_instances = self.forward_with_given_boxes(features, pred_instances)
             return pred_instances, {}
 

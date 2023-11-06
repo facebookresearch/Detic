@@ -97,12 +97,14 @@ def fast_rcnn_inference_single_image(
 
 def _nms_coord_trick(boxes, idxs):
     if boxes.numel() == 0:
-        return torch.empty((0,), dtype=torch.int64, device=boxes.device)
+        return torch.empty((0, 4), dtype=torch.int64, device=boxes.device)
+    if idxs.ndim == 2:
+        idxs = idxs[:, 0]
     offsets = idxs.to(boxes) * (boxes.max() + torch.tensor(1).to(boxes))
     return boxes + offsets[:, None]
 
 
-def asymmetric_nms(boxes, scores, priority=None, iou_threshold=0.99):
+def asymmetric_nms(boxes, scores, priority=None, iou_threshold=0.98):
     # Sort boxes by their confidence scores in descending order
     area = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
     if priority is not None:
@@ -129,7 +131,9 @@ def asymmetric_nms(boxes, scores, priority=None, iou_threshold=0.99):
             torch.maximum(zero, torch.minimum(b[3], boxes[1:, 3]) - torch.maximum(b[1], boxes[1:, 1]))
         )
         smaller_box_area = torch.minimum(area[0], area[1:])
+        # print(boxes.shape, area.shape, intersection_area.shape, smaller_box_area.shape)
         iou = intersection_area / (smaller_box_area + 1e-7)
+        print(iou)
 
         # Filter out boxes with IoU above the threshold
         overlap_indices.append(indices[torch.where(iou > iou_threshold)[0] + 1])
@@ -144,4 +148,6 @@ def asymmetric_nms(boxes, scores, priority=None, iou_threshold=0.99):
         torch.zeros([0], dtype=torch.int32, device=boxes.device))
     # print(nn, overlap_indices)
     # if nn>1 and input():embed()
+    print(selected_indices.shape)
+    input()
     return selected_indices, overlap_indices
