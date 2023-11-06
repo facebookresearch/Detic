@@ -148,6 +148,6 @@ def asymmetric_nms(boxes, scores, priority=None, iou_threshold=0.98):
         torch.zeros([0], dtype=torch.int32, device=boxes.device))
     # print(nn, overlap_indices)
     # if nn>1 and input():embed()
-    print(selected_indices.shape)
-    input()
+    # print(selected_indices.shape)
+    # input()
     return selected_indices, overlap_indices
