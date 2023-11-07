@@ -451,7 +451,7 @@ class DeticCascadeROIHeads2(DeticCascadeROIHeads):
         cls_feats = cls_feats.split([len(p) for p in proposals], dim=0)
         for i in range(len(pred_instances)):
             pred_instances[i].pred_scores = scores[i][filt_idxs][:, :-1]
-            pred_instances[i].stage_scores = stage_scores[i][filt_idxs]
+            pred_instances[i].stage_scores = stage_scores[i][filt_idxs][:, :, :-1]
             pred_instances[i].raw_features = box_features[i][filt_idxs]
             # pred_instances[i].raw_features = feats_per_image[i][filt_idxs]
             pred_instances[i].clip_features = cls_feats[i][filt_idxs]
@@ -781,8 +781,8 @@ def as_detections(outputs, labels):
     return detections, labels
 
 
-import ipdb
-@ipdb.iex
+# import ipdb
+# @ipdb.iex
 @torch.no_grad()
 def run(src, vocab, out_file=True, size=480, fps_down=1, roi_head=None, roi_conf_threshold=0.5, model=None, **kw):
     """Run multi-target tracker on a particular sequence.
@@ -854,7 +854,7 @@ def run(src, vocab, out_file=True, size=480, fps_down=1, roi_head=None, roi_conf
         with sv.VideoSink(out_file, video_info=video_info) as s, p:
             pbar = tqdm.tqdm(enumerate(sv.get_video_frames_generator(src)), total=video_info.total_frames)
             for i, frame in pbar:
-                if i < 1070: continue
+                # if i < 1070: continue
                 if i % fps_down: continue
                 # if i > 100: break
                 frame = cv2.resize(frame, WH)
