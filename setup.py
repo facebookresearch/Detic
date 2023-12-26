@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='Detic-hachix',
+    name='Detic',
     version='1.0.0',
     description='Detic: Detecting Twenty-thousand Classes using Image-level Supervision',
     author='Facebook AI Research',
