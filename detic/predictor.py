@@ -14,9 +14,10 @@ from detectron2.utils.visualizer import ColorMode, Visualizer
 from .modeling.utils import reset_cls_test
 
 
-def get_clip_embeddings(vocabulary, prompt='a '):
+def get_clip_embeddings(vocabulary, prompt='a ', clip_download_root=None):
     from detic.modeling.text.text_encoder import build_text_encoder
-    text_encoder = build_text_encoder(pretrain=True)
+    text_encoder = build_text_encoder(pretrain=True,
+                                      clip_download_root=clip_download_root)
     text_encoder.eval()
     texts = [prompt + x for x in vocabulary]
     emb = text_encoder(texts).detach().permute(1, 0).contiguous().cpu()
@@ -37,19 +38,24 @@ BUILDIN_METADATA_PATH = {
 }
 
 class VisualizationDemo(object):
-    def __init__(self, cfg, args, 
-        instance_mode=ColorMode.IMAGE, parallel=False):
+    def __init__(self, cfg, args,
+        instance_mode=ColorMode.IMAGE, parallel=False,
+        clip_download_root=None):
         """
         Args:
             cfg (CfgNode):
             instance_mode (ColorMode):
             parallel (bool): whether to run the model in different processes from visualization.
                 Useful since the visualization logic can be slow.
+            clip_download_root (str): Custom clip download root path
         """
+        self.clip_download_root = clip_download_root
         if args.vocabulary == 'custom':
             self.metadata = MetadataCatalog.get("__unused")
             self.metadata.thing_classes = args.custom_vocabulary.split(',')
-            classifier = get_clip_embeddings(self.metadata.thing_classes)
+            classifier = get_clip_embeddings(self.metadata.thing_classes,
+                                             clip_download_root=self.clip_download_root)
+            self._default_vocabulary = None
         else:
             self.metadata = MetadataCatalog.get(
                 BUILDIN_METADATA_PATH[args.vocabulary])
