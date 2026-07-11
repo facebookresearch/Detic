@@ -78,13 +78,47 @@ def custom_load_lvis_json(json_file, image_root, dataset_name=None):
         record["width"] = img_dict["width"]
         record["not_exhaustive_category_ids"] = img_dict.get(
             "not_exhaustive_category_ids", [])
-        record["neg_category_ids"] = img_dict.get("neg_category_ids", [])
         # NOTE: modified by Xingyi: convert to 0-based
-        record["neg_category_ids"] = [
-            catid2contid[x] for x in record["neg_category_ids"]]
-        if 'pos_category_ids' in img_dict:
-            record['pos_category_ids'] = [
-                catid2contid[x] for x in img_dict.get("pos_category_ids", [])]
+#
+# UPGRADE:
+# Some custom or partially annotated LVIS datasets may reference
+# category IDs that do not exist in `categories`. The original code
+# directly indexed `catid2contid[x]`, which raises:
+#
+#     KeyError: <category_id>
+#
+# Instead of crashing, we now skip unknown category IDs and emit
+# a warning so training can continue.
+neg_cat_ids = img_dict.get("neg_category_ids", [])
+record["neg_category_ids"] = []
+
+for cat_id in neg_cat_ids:
+    if cat_id in catid2contid:
+        record["neg_category_ids"].append(catid2contid[cat_id])
+    else:
+        logger.warning(
+            "Image %s: skipping unknown neg_category_id=%s",
+            img_dict["id"],
+            cat_id,
+        )
+        # UPGRADE:
+# Apply the same defensive handling to image-level positive labels.
+# Invalid category IDs are ignored instead of causing KeyError.
+if 'pos_category_ids' in img_dict:
+    pos_cat_ids = img_dict.get("pos_category_ids", [])
+    record["pos_category_ids"] = []
+
+    for cat_id in pos_cat_ids:
+        if cat_id in catid2contid:
+            record["pos_category_ids"].append(
+                catid2contid[cat_id]
+            )
+        else:
+            logger.warning(
+                "Image %s: skipping unknown pos_category_id=%s",
+                img_dict["id"],
+                cat_id,
+            )
         if 'captions' in img_dict:
             record['captions'] = img_dict['captions']
         if 'caption_features' in img_dict:
@@ -96,8 +130,29 @@ def custom_load_lvis_json(json_file, image_root, dataset_name=None):
             assert anno["image_id"] == image_id
             if anno.get('iscrowd', 0) > 0:
                 continue
-            obj = {"bbox": anno["bbox"], "bbox_mode": BoxMode.XYWH_ABS}
-            obj["category_id"] = catid2contid[anno['category_id']] 
+            
+            obj = {
+    "bbox": anno["bbox"],
+    "bbox_mode": BoxMode.XYWH_ABS,
+}
+
+# UPGRADE:
+# Annotation records may also contain category IDs that are not
+# present in `categories`. The previous implementation raised
+# KeyError and aborted dataset loading entirely.
+#
+# Skip invalid annotations and continue loading the remaining data.
+anno_cat_id = anno["category_id"]
+
+if anno_cat_id not in catid2contid:
+    logger.warning(
+        "Image %s: skipping annotation with unknown category_id=%s",
+        image_id,
+        anno_cat_id,
+    )
+    continue
+
+obj["category_id"] = catid2contid[anno_cat_id]
             if 'segmentation' in anno:
                 segm = anno["segmentation"]
                 valid_segm = [poly for poly in segm \
